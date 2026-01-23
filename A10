@@ -1,0 +1,195 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { DataGrid, GridToolbarContainer, GridToolbarExport, gridClasses } from '@mui/x-data-grid';
+import { 
+  TextField, Box, Typography, Paper, Alert, Collapse, Stack, 
+  alpha, Button, Divider, ClickAwayListener 
+} from '@mui/material';
+
+// Icons
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import DateRangeIcon from '@mui/icons-material/DateRange';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import HistoryIcon from '@mui/icons-material/History';
+
+// --- MIXED DUMMY DATA GENERATION (2020 TO 2026) ---
+const generateMixedData = () => {
+  const data = [];
+  const entryTypes = ['Old Entry', 'New Entry LOAN', 'New Entry DEPOSITS', 'New Entry I/E'];
+  for (let i = 1; i <= 150; i++) {
+    const day = String((i % 28) + 1).padStart(2, '0');
+    let year, month;
+    if (i <= 50) { year = '2020'; month = '11'; } 
+    else if (i <= 100) { year = '2023'; month = '05'; } 
+    else { year = '2026'; month = '01'; } 
+
+    data.push({
+      id: i,
+      RECON_RUN_DATE: `${year}-${month}-${day}`,
+      BRANCH_CODE: `B${300 + i}`,
+      CURRENCY: 'INR',
+      CGL: `9900${i}500`,
+      OBS_BALANCE: (Math.random() * 1000000).toFixed(2),
+      GL_BALANCE: (Math.random() * 1000000).toFixed(2),
+      DIFFERENCE_AMOUNT: (Math.random() * 20000).toFixed(2) * (i % 4 === 0 ? -1 : 1),
+      TYPE: i > 120 ? entryTypes[i % 4] : 'Old Entry',
+    });
+  }
+  return data;
+};
+
+const dummyData = generateMixedData();
+
+export default function ProfessionalReconSystem() {
+  const [activeTab, setActiveTab] = useState(null); 
+  const [rows, setRows] = useState(dummyData);
+  const [glcc, setGlcc] = useState('');
+  const [date1, setDate1] = useState('');
+  const [date2, setDate2] = useState('');
+  const [error, setError] = useState('');
+
+  const resetFilters = () => {
+    setGlcc(''); setDate1(''); setDate2('');
+    setRows(dummyData); setError(''); setActiveTab(null);
+  };
+
+  // 1. Particular Date Search
+  const applyParticularSearch = () => {
+    if (!date1) return;
+    setRows(dummyData.filter(r => r.RECON_RUN_DATE === date1));
+  };
+
+  // 2. Current Difference (GLCC Mandatory + New Entry Logic)
+  const applyCurrentDiff = () => {
+    if (!glcc) {
+      setError("GLCC Code is mandatory for Current Difference monitoring.");
+      setRows([]);
+      return;
+    }
+    const newEntries = dummyData.filter(r => r.TYPE.toLowerCase().includes('new entry'));
+    if (newEntries.length > 0) {
+      const minDate = newEntries.map(r => r.RECON_RUN_DATE).sort()[0];
+      const today = new Date().toISOString().split('T')[0];
+      setRows(dummyData.filter(r => {
+        const fullGlcc = `${r.BRANCH_CODE}${r.CURRENCY}${r.CGL}`.toLowerCase();
+        return fullGlcc.includes(glcc.toLowerCase()) && r.RECON_RUN_DATE >= minDate && r.RECON_RUN_DATE <= today;
+      }));
+    }
+  };
+
+  // 3. Search Range (GLCC Mandatory)
+  const applyRangeSearch = () => {
+    if (!glcc || !date1 || !date2) return;
+    setRows(dummyData.filter(r => {
+      const fullGlcc = `${r.BRANCH_CODE}${r.CURRENCY}${r.CGL}`.toLowerCase();
+      return fullGlcc.includes(glcc.toLowerCase()) && r.RECON_RUN_DATE >= date1 && r.RECON_RUN_DATE <= date2;
+    }));
+  };
+
+  useEffect(() => {
+    if (activeTab === 'particular') applyParticularSearch();
+    if (activeTab === 'range') applyRangeSearch();
+  }, [glcc, date1, date2, activeTab]);
+
+  const columns = [
+    { 
+        field: 'glcc', 
+        headerName: 'GLCC Code', 
+        flex: 1.5, 
+        minWidth: 220, 
+        valueGetter: (v, row) => `${row.BRANCH_CODE}${row.CURRENCY}${row.CGL}` 
+    },
+    { field: 'RECON_RUN_DATE', headerName: 'Run Date', flex: 1, minWidth: 120 },
+    { field: 'OBS_BALANCE', headerName: 'OBS Balance', flex: 1, minWidth: 140, align: 'right' },
+    { field: 'GL_BALANCE', headerName: 'GL Balance', flex: 1, minWidth: 140, align: 'right' },
+    { 
+        field: 'DIFFERENCE_AMOUNT', 
+        headerName: 'Difference', 
+        flex: 1, 
+        minWidth: 140, 
+        align: 'right', 
+        cellClassName: (p) => p.value < 0 ? 'text-red' : 'text-green' 
+    },
+    { field: 'TYPE', headerName: 'Type', flex: 1.5, minWidth: 180 },
+  ];
+
+  return (
+    <ClickAwayListener onClickAway={() => setActiveTab(null)}>
+      <Box sx={{ p: 4, bgcolor: '#f8fafc', minHeight: '100vh' }}>
+        
+        <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box>
+                <Typography variant="h5" sx={{ fontWeight: 800, color: '#0f172a' }}>Reconciliation Management</Typography>
+                <Typography variant="body2" color="textSecondary">Corporate Data Integrity Dashboard</Typography>
+            </Box>
+        </Box>
+
+        {/* Action Tiles */}
+        <Stack direction="row" spacing={3} sx={{ mb: 4 }}>
+          <SearchTile 
+            title="Particular Date" icon={<EventAvailableIcon />} color="#6366f1" 
+            active={activeTab === 'particular'} onClick={() => {setActiveTab('particular'); resetFilters();}} 
+          />
+          <SearchTile 
+            title="Current Difference" icon={<HistoryIcon />} color="#10b981" 
+            active={activeTab === 'current'} onClick={() => {setActiveTab('current'); applyCurrentDiff();}} 
+          />
+          <SearchTile 
+            title="Search Range" icon={<DateRangeIcon />} color="#3b82f6" 
+            active={activeTab === 'range'} onClick={() => {setActiveTab('range'); resetFilters();}} 
+          />
+        </Stack>
+
+        {/* Expandable Panel */}
+        <Collapse in={activeTab !== null}>
+          <Paper elevation={0} sx={{ p: 3, mb: 4, borderRadius: '12px', border: '1px solid #e2e8f0', bgcolor: '#fff' }}>
+            <Stack direction="row" spacing={3} alignItems="center">
+              {(activeTab === 'current' || activeTab === 'range') && (
+                <TextField label="Mandatory GLCC" variant="outlined" size="small" sx={{ width: 300 }} value={glcc} onChange={(e) => setGlcc(e.target.value)} />
+              )}
+              <TextField type="date" label={activeTab === 'range' ? "Start Date" : "Date Select"} size="small" InputLabelProps={{ shrink: true }} value={date1} onChange={(e) => setDate1(e.target.value)} sx={{ width: 200 }} />
+              {activeTab === 'range' && (
+                <TextField type="date" label="End Date" size="small" InputLabelProps={{ shrink: true }} value={date2} onChange={(e) => setDate2(e.target.value)} sx={{ width: 200 }} />
+              )}
+              
+              <Divider orientation="vertical" flexItem />
+
+              <Button variant="text" color="error" startIcon={<RestartAltIcon />} onClick={resetFilters} sx={{ fontWeight: 700 }}>Reset</Button>
+              <GridToolbarExport startIcon={<FileDownloadIcon />} sx={{ fontWeight: 700, color: '#0f172a' }} />
+            </Stack>
+            {error && <Alert severity="error" sx={{ mt: 2, borderRadius: '8px' }}>{error}</Alert>}
+          </Paper>
+        </Collapse>
+
+        {/* Professional DataGrid */}
+        <Paper elevation={0} sx={{ borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+          <Box sx={{ 
+            height: 600, width: '100%', 
+            '& .text-red': { color: '#ef4444', fontWeight: 700 }, 
+            '& .text-green': { color: '#10b981', fontWeight: 700 } 
+          }}>
+            <DataGrid 
+              rows={rows} columns={columns} pageSizeOptions={[10, 20, 50]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+              sx={{ 
+                border: 0, 
+                [`& .${gridClasses.columnHeader}`]: { bgcolor: '#f1f5f9', color: '#475569', fontWeight: 700 },
+                [`& .${gridClasses.cell}`]: { borderBottom: '1px solid #f1f5f9' }
+              }}
+            />
+          </Box>
+        </Paper>
+      </Box>
+    </ClickAwayListener>
+  );
+}
+
+function SearchTile({ title, icon, color, active, onClick }) {
+  return (
+    <Paper onClick={(e) => { e.stopPropagation(); onClick(); }} sx={{ 
+        p: 3, flex: 1, cursor: 'pointer', borderRadius: '12px', border: active ? `2px solid ${color}` : '1px solid #e2e8f0', 
+        bgcolor: active ? alpha(color, 0.05) : '#fff', transition: 'all 0.2s ease',
+        '&:hover': { transform: 'translateY(-2px)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }
+    }}>
+      <Stack direction="row" spacing={2} alignItems="center">
+        <Box sx={{ p: 1, borderRadius: '8px', bgcolor: alpha(color, 0.1), color: color, display: 'flex' }}>{icon}</Box>
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, color: active ? color
