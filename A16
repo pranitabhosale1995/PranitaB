@@ -1,0 +1,238 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  DataGrid, 
+  GridToolbarContainer, 
+  GridToolbarExport, 
+  gridClasses 
+} from '@mui/x-data-grid';
+import { 
+  TextField, Box, Typography, Paper, Alert, Collapse, Stack, 
+  alpha, Button, Divider 
+} from '@mui/material';
+
+// चिन्हांचे आयात (Icons)
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import DateRangeIcon from '@mui/icons-material/DateRange';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import HistoryIcon from '@mui/icons-material/History';
+
+// --- २०२५-२०२६ मिक्स डमी डेटा ---
+const generateData = () => {
+  const data = [];
+  const types = ['Old Entry', 'New Entry LOAN', 'New Entry DEPOSITS', 'New Entry I/E'];
+  for (let i = 1; i <= 100; i++) {
+    const day = String((i % 28) + 1).padStart(2, '0');
+    const year = i <= 50 ? '2025' : '2026';
+    const month = i <= 50 ? '12' : '01';
+    data.push({
+      id: i,
+      BRANCH_CODE: `B10${i}`,
+      CURRENCY: 'INR',
+      CGL: `9900${i}`,
+      RECON_RUN_DATE: `${year}-${month}-${day}`,
+      OBS_BALANCE: (Math.random() * 1000000).toFixed(2),
+      GL_BALANCE: (Math.random() * 1000000).toFixed(2),
+      DIFFERENCE_AMOUNT: (Math.random() * 20000).toFixed(2) * (i % 4 === 0 ? -1 : 1),
+      TYPE: i > 70 ? types[i % 4] : 'Old Entry',
+    });
+  }
+  return data;
+};
+
+const dummyData = generateData();
+
+// --- टूलबार घटक (Context Error टाळण्यासाठी) ---
+function CustomToolbar() {
+  return (
+    <GridToolbarContainer sx={{ p: 2, bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+      <Typography variant="subtitle2" sx={{ flexGrow: 1, fontWeight: 700, color: '#475569' }}>
+        FINCORE RECONCILIATION AUDIT LOG
+      </Typography>
+      <GridToolbarExport startIcon={<FileDownloadIcon />} sx={{ fontWeight: 700, color: '#1e293b' }} />
+    </GridToolbarContainer>
+  );
+}
+
+export default function FincoreDashboard() {
+  const [activeTab, setActiveTab] = useState(null); 
+  const [rows, setRows] = useState(dummyData);
+  const [glcc, setGlcc] = useState('');
+  const [date1, setDate1] = useState('');
+  const [date2, setDate2] = useState('');
+  const [error, setError] = useState('');
+
+  const resetFilters = () => {
+    setGlcc(''); setDate1(''); setDate2('');
+    setRows(dummyData); setError(''); setActiveTab(null);
+  };
+
+  // १. विशिष्ट तारीख (Particular Date)
+  const applyParticularSearch = () => {
+    if (!date1) return;
+    setRows(dummyData.filter(r => r.RECON_RUN_DATE === date1));
+  };
+
+  // २. चालू फरक (Current Difference)
+  const applyCurrentDiff = () => {
+    if (!glcc) {
+      setError("GLCC Code is mandatory for Current Difference monitoring.");
+      setRows([]);
+      return;
+    }
+    setError('');
+    const newEntries = dummyData.filter(r => r.TYPE.toLowerCase().includes('new entry'));
+    if (newEntries.length > 0) {
+      const minDate = newEntries.map(r => r.RECON_RUN_DATE).sort()[0];
+      setRows(dummyData.filter(r => {
+        const fullGlccString = `${r.BRANCH_CODE}${r.CURRENCY}${r.CGL}`.toLowerCase();
+        return fullGlccString.includes(glcc.toLowerCase()) && r.RECON_RUN_DATE >= minDate;
+      }));
+    }
+  };
+
+  // ३. श्रेणी शोध (Range Search)
+  const applyRangeSearch = () => {
+    if (!glcc || !date1 || !date2) return;
+    setError('');
+    setRows(dummyData.filter(r => {
+      const fullGlccString = `${r.BRANCH_CODE}${r.CURRENCY}${r.CGL}`.toLowerCase();
+      return fullGlccString.includes(glcc.toLowerCase()) && r.RECON_RUN_DATE >= date1 && r.RECON_RUN_DATE <= date2;
+    }));
+  };
+
+  useEffect(() => {
+    if (activeTab === 'particular') applyParticularSearch();
+    if (activeTab === 'range') applyRangeSearch();
+  }, [glcc, date1, date2, activeTab]);
+
+  const columns = useMemo(() => [
+    { 
+      field: 'glcc', 
+      headerName: 'GLCC Code', 
+      flex: 1.5, 
+      minWidth: 250, 
+      // Safe ValueGetter - Supports multiple MUI X versions
+      valueGetter: (v, row) => {
+        const target = row || v?.row; 
+        if (!target) return "";
+        return `${target.BRANCH_CODE || ""}${target.CURRENCY || ""}${target.CGL || ""}`;
+      }
+    },
+    { field: 'RECON_RUN_DATE', headerName: 'Run Date', flex: 1, minWidth: 130 },
+    { field: 'OBS_BALANCE', headerName: 'OBS Balance', flex: 1, minWidth: 150, align: 'right' },
+    { field: 'GL_BALANCE', headerName: 'GL Balance', flex: 1, minWidth: 150, align: 'right' },
+    { 
+      field: 'DIFFERENCE_AMOUNT', 
+      headerName: 'Difference', 
+      flex: 1, 
+      minWidth: 150, 
+      align: 'right', 
+      cellClassName: (params) => params.value < 0 ? 'text-red' : 'text-green' 
+    },
+    { field: 'TYPE', headerName: 'Type', flex: 1.5, minWidth: 200 },
+  ], []);
+
+  return (
+    <Box sx={{ p: 4, bgcolor: '#f8fafc', minHeight: '100vh' }}>
+      <Typography variant="h4" sx={{ fontWeight: 800, color: '#0f172a', mb: 4 }}>
+        Fincore Reconciliation System
+      </Typography>
+
+      {/* बटण क्रम */}
+      <Stack direction="row" spacing={3} sx={{ mb: 4 }}>
+        <Button 
+          variant={activeTab === 'particular' ? "contained" : "outlined"} 
+          onClick={() => setActiveTab(activeTab === 'particular' ? null : 'particular')} 
+          startIcon={<EventAvailableIcon />}
+          sx={{ flex: 1, py: 2, borderRadius: 3, fontWeight: 700 }}
+        >
+          1. Particular Date
+        </Button>
+        <Button 
+          variant={activeTab === 'current' ? "contained" : "outlined"} 
+          color="success" 
+          onClick={() => {setActiveTab('current'); setError('');}} 
+          startIcon={<HistoryIcon />}
+          sx={{ flex: 1, py: 2, borderRadius: 3, fontWeight: 700 }}
+        >
+          2. Current Difference
+        </Button>
+        <Button 
+          variant={activeTab === 'range' ? "contained" : "outlined"} 
+          color="primary" 
+          onClick={() => setActiveTab(activeTab === 'range' ? null : 'range')} 
+          startIcon={<DateRangeIcon />}
+          sx={{ flex: 1, py: 2, borderRadius: 3, fontWeight: 700 }}
+        >
+          3. Search Range
+        </Button>
+      </Stack>
+
+      {/* शोध क्षेत्र (Search Panel) */}
+      <Collapse in={activeTab !== null}>
+        <Paper elevation={0} sx={{ p: 3, mb: 4, borderRadius: 3, border: '1px solid #e2e8f0', bgcolor: '#fff' }}>
+          <Stack direction="row" spacing={3} alignItems="center">
+            {(activeTab === 'current' || activeTab === 'range') && (
+              <TextField 
+                label="GLCC (Compulsory)" 
+                variant="outlined" 
+                size="small" 
+                sx={{ width: 300 }} 
+                value={glcc} 
+                onChange={(e) => setGlcc(e.target.value)} 
+              />
+            )}
+            <TextField 
+              type="date" 
+              label={activeTab === 'range' ? "Start Date" : "Date Select"} 
+              size="small" 
+              InputLabelProps={{ shrink: true }} 
+              value={date1} 
+              onChange={(e) => setDate1(e.target.value)} 
+              sx={{ width: 200 }} 
+            />
+            {activeTab === 'range' && (
+              <TextField 
+                type="date" 
+                label="End Date" 
+                size="small" 
+                InputLabelProps={{ shrink: true }} 
+                value={date2} 
+                onChange={(e) => setDate2(e.target.value)} 
+                sx={{ width: 200 }} 
+              />
+            )}
+            
+            <Divider orientation="vertical" flexItem />
+            <Button variant="outlined" color="error" startIcon={<RestartAltIcon />} onClick={resetFilters}>Reset</Button>
+            {activeTab === 'current' && (
+              <Button variant="contained" color="success" onClick={applyCurrentDiff}>Filter Current Diff</Button>
+            )}
+          </Stack>
+          {error && <Alert severity="error" sx={{ mt: 2, borderRadius: 2 }}>{error}</Alert>}
+        </Paper>
+      </Collapse>
+
+      <Paper elevation={0} sx={{ width: '100%', borderRadius: 3, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+        <Box sx={{ 
+          height: 600, width: '100%', 
+          '& .text-red': { color: '#ef4444', fontWeight: 700 }, 
+          '& .text-green': { color: '#10b981', fontWeight: 700 } 
+        }}>
+          <DataGrid 
+            rows={rows} 
+            columns={columns} 
+            pageSizeOptions={[10, 20, 50]} 
+            initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+            slots={{ toolbar: CustomToolbar }}
+            sx={{ 
+              border: 0, 
+              [`& .${gridClasses.columnHeader}`]: { bgcolor: '#f1f5f9', color: '#475569', fontWeight: 700 },
+            }}
+          />
+        </Box>
+      </Paper>
+    </Box>
+  );
+}
