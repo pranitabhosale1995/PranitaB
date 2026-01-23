@@ -1,0 +1,84 @@
+import React, { useMemo, useState } from "react"; import { DataGrid } from "@mui/x-data-grid"; import { Card, CardContent } from "@/components/ui/card"; import { Button } from "@/components/ui/button"; import { Input } from "@/components/ui/input"; import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+
+// ================= Dummy Recon Feed (ID excluded as per requirement) ================= const feedData = [ { reconRunDate: "2025-01-20", branch: "2555", currency: "INR", cgl: "2006070601", differenceAmount: 113921.25, diffFromYesterday: -2049790.65, type: "NEW ENTRY", head: "LOAN" }, { reconRunDate: "2025-01-21", branch: "2555", currency: "INR", cgl: "2006070601", differenceAmount: 7800.43, diffFromYesterday: -7000.43, type: "", head: "LOAN" }, { reconRunDate: "2025-01-22", branch: "2555", currency: "INR", cgl: "2006070601", differenceAmount: 665139503.85, diffFromYesterday: 665139503.85, type: "", head: "DEPOSITS" } ];
+
+// ================= DataGrid Columns ================= const columns = [ { field: "reconRunDate", headerName: "Recon Run Date", flex: 1 }, { field: "branch", headerName: "Branch", flex: 1 }, { field: "currency", headerName: "Currency", flex: 1 }, { field: "cgl", headerName: "CGL", flex: 1.2 }, { field: "differenceAmount", headerName: "Difference Amount", flex: 1.5 }, { field: "diffFromYesterday", headerName: "Diff From Yesterday", flex: 1.5 }, { field: "type", headerName: "Type", flex: 1 }, { field: "head", headerName: "Head", flex: 1 } ];
+
+export default function ReconSearchPage() { const [rows, setRows] = useState(feedData);
+
+const [branch, setBranch] = useState(""); const [currency, setCurrency] = useState(""); const [cgl, setCgl] = useState(""); const [fromDate, setFromDate] = useState(""); const [toDate, setToDate] = useState(""); const [particularDate, setParticularDate] = useState("");
+
+// ================= Helpers ================= const sameGLCC = (row) => row.branch === branch && row.currency === currency && row.cgl === cgl;
+
+// ================= 1. GLCC + Date Range ================= const searchByGlccDateRange = () => { setRows( feedData.filter( (r) => sameGLCC(r) && r.reconRunDate >= fromDate && r.reconRunDate <= toDate ) ); };
+
+// ================= 2. Particular Date ================= const searchByParticularDate = () => { setRows(feedData.filter((r) => r.reconRunDate === particularDate)); };
+
+// ================= 3. Current Difference ================= const searchCurrentDifference = () => { const glccData = feedData.filter(sameGLCC);
+
+const newEntry = glccData.find((r) => r.type === "NEW ENTRY");
+if (!newEntry) return;
+
+setRows(glccData.filter((r) => r.reconRunDate >= newEntry.reconRunDate));
+
+};
+
+// ================= Download ================= const downloadCSV = () => { const csv = [ [ "Recon Run Date", "Branch", "Currency", "CGL", "Difference Amount", "Diff From Yesterday", "Type", "Head" ], ...rows.map((r) => Object.values(r)) ] .map((e) => e.join(",")) .join("\n");
+
+const blob = new Blob([csv], { type: "text/csv" });
+const url = window.URL.createObjectURL(blob);
+const a = document.createElement("a");
+a.href = url;
+a.download = "recon-data.csv";
+a.click();
+
+};
+
+const gridRows = useMemo( () => rows.map((r, i) => ({ id: i + 1, ...r })), [rows] );
+
+return ( <div className="p-6 space-y-6"> <h2 className="text-2xl font-bold">Recon Difference Search</h2>
+
+<Card>
+    <CardContent>
+      <Tabs defaultValue="range">
+        <TabsList>
+          <TabsTrigger value="range">GLCC + Date Range</TabsTrigger>
+          <TabsTrigger value="date">Particular Date</TabsTrigger>
+          <TabsTrigger value="current">Current Difference</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="range" className="flex gap-3 flex-wrap mt-4">
+          <Input placeholder="Branch" onChange={(e) => setBranch(e.target.value)} />
+          <Input placeholder="Currency" onChange={(e) => setCurrency(e.target.value)} />
+          <Input placeholder="CGL" onChange={(e) => setCgl(e.target.value)} />
+          <Input type="date" onChange={(e) => setFromDate(e.target.value)} />
+          <Input type="date" onChange={(e) => setToDate(e.target.value)} />
+          <Button onClick={searchByGlccDateRange}>Search</Button>
+        </TabsContent>
+
+        <TabsContent value="date" className="flex gap-3 mt-4">
+          <Input type="date" onChange={(e) => setParticularDate(e.target.value)} />
+          <Button onClick={searchByParticularDate}>Search</Button>
+        </TabsContent>
+
+        <TabsContent value="current" className="flex gap-3 mt-4">
+          <Input placeholder="Branch" onChange={(e) => setBranch(e.target.value)} />
+          <Input placeholder="Currency" onChange={(e) => setCurrency(e.target.value)} />
+          <Input placeholder="CGL" onChange={(e) => setCgl(e.target.value)} />
+          <Button onClick={searchCurrentDifference}>Get Current Diff</Button>
+        </TabsContent>
+      </Tabs>
+    </CardContent>
+  </Card>
+
+  <Card>
+    <CardContent style={{ height: 420 }}>
+      <div className="flex justify-end mb-2">
+        <Button onClick={downloadCSV}>Download</Button>
+      </div>
+      <DataGrid rows={gridRows} columns={columns} pageSizeOptions={[5, 10]} />
+    </CardContent>
+  </Card>
+</div>
+
+); }
