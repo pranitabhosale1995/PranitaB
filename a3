@@ -1,0 +1,173 @@
+import React, { useState, useMemo } from 'react';
+import { DataGrid } from '@mui/x-data-grid';
+import { 
+  TextField, 
+  Button, 
+  Stack, 
+  Box, 
+  Typography, 
+  Paper,
+  ThemeProvider,
+  createTheme
+} from '@mui/material';
+
+// १. इमेजमधील डेटावर आधारित Dummy Data (ID सह)
+const dummyRows = [
+  { id: 1, RECON_RUN_DATE: '2020-11-25', BRANCH_CODE: '14321', CURRENCY: 'INR', CGL: '2006070601', OBS_BALANCE: 19960361.99, GL_BALANCE: 44620730.382, DIFFERENCE_AMOUNT: 154985631.608, TYPE: 'New Entry DEPOSITS' },
+  { id: 2, RECON_RUN_DATE: '2020-11-25', BRANCH_CODE: '04512', CURRENCY: 'INR', CGL: '1001030606', OBS_BALANCE: -20653035.15, GL_BALANCE: -15512.5, DIFFERENCE_AMOUNT: -2049790.65, TYPE: 'New Entry LOAN' },
+  { id: 3, RECON_RUN_DATE: '2020-11-25', BRANCH_CODE: '32375', CURRENCY: 'INR', CGL: '2115505002', OBS_BALANCE: 0, GL_BALANCE: -113921.25, DIFFERENCE_AMOUNT: 113921.25, TYPE: 'New Entry PPF' },
+  { id: 4, RECON_RUN_DATE: '2020-11-25', BRANCH_CODE: '17243', CURRENCY: 'INR', CGL: '2028070699', OBS_BALANCE: 0, GL_BALANCE: -1115.2, DIFFERENCE_AMOUNT: -1115.2, TYPE: 'New Entry PROVISION' },
+  { id: 5, RECON_RUN_DATE: '2020-11-25', BRANCH_CODE: '01048', CURRENCY: 'INR', CGL: '2028070699', OBS_BALANCE: 0, GL_BALANCE: 7080.432, DIFFERENCE_AMOUNT: -7080.432, TYPE: 'New Entry PROVISION' },
+  { id: 6, RECON_RUN_DATE: '2020-11-23', BRANCH_CODE: '01063', CURRENCY: 'INR', CGL: '2028070699', OBS_BALANCE: 0, GL_BALANCE: 1879.996, DIFFERENCE_AMOUNT: -1879.996, TYPE: 'New Entry PROVISION' },
+  { id: 7, RECON_RUN_DATE: '2020-11-22', BRANCH_CODE: '01070', CURRENCY: 'INR', CGL: '7047500101', OBS_BALANCE: 0, GL_BALANCE: 3589.0315, DIFFERENCE_AMOUNT: -3589.0315, TYPE: 'New Entry I/E' },
+  { id: 8, RECON_RUN_DATE: '2020-11-25', BRANCH_CODE: '18509', CURRENCY: 'INR', CGL: '2006070601', OBS_BALANCE: 8305566.63, GL_BALANCE: -2983.5, DIFFERENCE_AMOUNT: 8317539.73, TYPE: 'New Entry LOAN' },
+];
+
+// थीम कॉन्फिगरेशन (Optional: लूक सुधारण्यासाठी)
+const theme = createTheme({
+  palette: {
+    primary: { main: '#1976d2' },
+    secondary: { main: '#9c27b0' },
+  },
+});
+
+const columns = [
+  { 
+    field: 'glcc', 
+    headerName: 'GLCC (Br-Curr-CGL)', 
+    width: 250,
+    // v6 आणि v7 साठी सुरक्षित valueGetter
+    valueGetter: (value, row) => {
+      if (!row) return '';
+      return `${row.BRANCH_CODE || ''}-${row.CURRENCY || ''}-${row.CGL || ''}`;
+    }
+  },
+  { field: 'RECON_RUN_DATE', headerName: 'Run Date', width: 130 },
+  { field: 'OBS_BALANCE', headerName: 'OBS Balance', width: 140, type: 'number' },
+  { field: 'GL_BALANCE', headerName: 'GL Balance', width: 140, type: 'number' },
+  { field: 'DIFFERENCE_AMOUNT', headerName: 'Diff Amount', width: 140, type: 'number' },
+  { field: 'TYPE', headerName: 'Entry Type', width: 220 },
+];
+
+const ReconDashboard = () => {
+  const [searchText, setSearchText] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [filterMode, setFilterMode] = useState('ALL');
+
+  // फिल्टरिंग लॉजिक
+  const filteredData = useMemo(() => {
+    return dummyRows.filter((row) => {
+      const glccStr = `${row.BRANCH_CODE}${row.CURRENCY}${row.CGL}`.toLowerCase();
+      const matchesSearch = glccStr.includes(searchText.toLowerCase());
+      
+      if (!matchesSearch) return false;
+
+      switch (filterMode) {
+        case 'DATE':
+          return startDate ? row.RECON_RUN_DATE === startDate : true;
+        case 'RANGE':
+          if (startDate && endDate) {
+            return row.RECON_RUN_DATE >= startDate && row.RECON_RUN_DATE <= endDate;
+          }
+          return true;
+        case 'CURRENT':
+          return row.TYPE && row.TYPE.startsWith('New Entry');
+        default:
+          return true;
+      }
+    });
+  }, [searchText, startDate, endDate, filterMode]);
+
+  return (
+    <ThemeProvider theme={theme}>
+      <Box sx={{ p: 4, bgcolor: '#f0f2f5', minHeight: '100vh' }}>
+        <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
+          <Typography variant="h5" sx={{ mb: 3, fontWeight: 'bold', color: '#1976d2' }}>
+            Fincore Reconciliation System
+          </Typography>
+
+          {/* सर्च आणि फिल्टर कंट्रोल्स */}
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 3 }}>
+            <TextField
+              size="small"
+              label="Search GLCC"
+              variant="outlined"
+              placeholder="e.g. 14321INR"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              sx={{ flexGrow: 1 }}
+            />
+            <TextField
+              size="small"
+              type="date"
+              label="Date Select"
+              InputLabelProps={{ shrink: true }}
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+            <TextField
+              size="small"
+              type="date"
+              label="End Date (Range Only)"
+              InputLabelProps={{ shrink: true }}
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
+          </Stack>
+
+          {/* बटन्स */}
+          <Stack direction="row" spacing={2} flexWrap="wrap">
+            <Button variant="contained" onClick={() => setFilterMode('RANGE')}>
+              Date Range Search
+            </Button>
+            <Button variant="contained" color="secondary" onClick={() => setFilterMode('DATE')}>
+              Search Particular Date
+            </Button>
+            <Button 
+              variant="contained" 
+              sx={{ bgcolor: '#2e7d32', '&:hover': { bgcolor: '#1b5e20' } }}
+              onClick={() => setFilterMode('CURRENT')}
+            >
+              Current Diff (New Entries)
+            </Button>
+            <Button variant="outlined" color="error" onClick={() => {
+              setFilterMode('ALL');
+              setSearchText('');
+              setStartDate('');
+              setEndDate('');
+            }}>
+              Reset
+            </Button>
+          </Stack>
+        </Paper>
+
+        {/* डेटा ग्रिड */}
+        <Paper elevation={3} sx={{ height: 550, width: '100%', overflow: 'hidden' }}>
+          <DataGrid
+            rows={filteredData}
+            columns={columns}
+            pageSizeOptions={[5, 10, 25]}
+            initialState={{
+              pagination: { paginationModel: { pageSize: 10 } },
+            }}
+            disableRowSelectionOnClick
+            sx={{
+              border: 0,
+              '& .MuiDataGrid-columnHeaders': {
+                backgroundColor: '#e3f2fd',
+                color: '#1976d2',
+                fontSize: '0.95rem',
+              },
+              '& .MuiDataGrid-cell:hover': {
+                color: 'primary.main',
+              },
+            }}
+          />
+        </Paper>
+      </Box>
+    </ThemeProvider>
+  );
+};
+
+export default ReconDashboard;
