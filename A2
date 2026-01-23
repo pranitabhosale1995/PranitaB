@@ -1,0 +1,142 @@
+import React, { useState, useMemo } from 'react';
+import { DataGrid } from '@mui/x-data-grid';
+import { 
+  TextField, 
+  Button, 
+  Stack, 
+  Box, 
+  Typography, 
+  Paper 
+} from '@mui/material';
+
+// १. इमेजमधील डेटावर आधारित Dummy Data
+const dummyRows = [
+  { id: 1, RECON_RUN_DATE: '2020-11-25', BRANCH_CODE: '14321', CURRENCY: 'INR', CGL: '2006070601', OBS_BALANCE: 19960361.99, GL_BALANCE: 44620730.382, DIFFERENCE_AMOUNT: 154985631.608, TYPE: 'New Entry DEPOSITS' },
+  { id: 2, RECON_RUN_DATE: '2020-11-25', BRANCH_CODE: '04512', CURRENCY: 'INR', CGL: '1001030606', OBS_BALANCE: -20653035.15, GL_BALANCE: -15512.5, DIFFERENCE_AMOUNT: -2049790.65, TYPE: 'New Entry LOAN' },
+  { id: 3, RECON_RUN_DATE: '2020-11-25', BRANCH_CODE: '32375', CURRENCY: 'INR', CGL: '2115505002', OBS_BALANCE: 0, GL_BALANCE: -113921.25, DIFFERENCE_AMOUNT: 113921.25, TYPE: 'New Entry PPF' },
+  { id: 4, RECON_RUN_DATE: '2020-11-25', BRANCH_CODE: '17243', CURRENCY: 'INR', CGL: '2028070699', OBS_BALANCE: 0, GL_BALANCE: -1115.2, DIFFERENCE_AMOUNT: -1115.2, TYPE: 'New Entry PROVISION' },
+  { id: 5, RECON_RUN_DATE: '2020-11-25', BRANCH_CODE: '01048', CURRENCY: 'INR', CGL: '2028070699', OBS_BALANCE: 0, GL_BALANCE: 7080.432, DIFFERENCE_AMOUNT: -7080.432, TYPE: 'New Entry PROVISION' },
+  { id: 6, RECON_RUN_DATE: '2020-11-23', BRANCH_CODE: '01063', CURRENCY: 'INR', CGL: '2028070699', OBS_BALANCE: 0, GL_BALANCE: 1879.996, DIFFERENCE_AMOUNT: -1879.996, TYPE: 'New Entry PROVISION' },
+  { id: 7, RECON_RUN_DATE: '2020-11-22', BRANCH_CODE: '01070', CURRENCY: 'INR', CGL: '7047500101', OBS_BALANCE: 0, GL_BALANCE: 3589.0315, DIFFERENCE_AMOUNT: -3589.0315, TYPE: 'New Entry I/E' },
+  { id: 8, RECON_RUN_DATE: '2020-11-25', BRANCH_CODE: '18509', CURRENCY: 'INR', CGL: '2006070601', OBS_BALANCE: 8305566.63, GL_BALANCE: -2983.5, DIFFERENCE_AMOUNT: 8317539.73, TYPE: 'New Entry LOAN' },
+];
+
+const columns = [
+  // ID सोडून बाकी फील्ड्स
+  { 
+    field: 'glcc', 
+    headerName: 'GLCC (Branch+Curr+CGL)', 
+    width: 280,
+    valueGetter: (params) => `${params.row.BRANCH_CODE}-${params.row.CURRENCY}-${params.row.CGL}`
+  },
+  { field: 'RECON_RUN_DATE', headerName: 'Date', width: 130 },
+  { field: 'OBS_BALANCE', headerName: 'OBS Balance', width: 150, type: 'number' },
+  { field: 'GL_BALANCE', headerName: 'GL Balance', width: 150, type: 'number' },
+  { field: 'DIFFERENCE_AMOUNT', headerName: 'Diff Amount', width: 150, type: 'number' },
+  { field: 'TYPE', headerName: 'Type', width: 200 },
+];
+
+export default function ReconDashboard() {
+  const [searchText, setSearchText] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [filterMode, setFilterMode] = useState('ALL'); // ALL, RANGE, DATE, CURRENT
+
+  const filteredData = useMemo(() => {
+    return dummyRows.filter((row) => {
+      const glccStr = `${row.BRANCH_CODE}${row.CURRENCY}${row.CGL}`.toLowerCase();
+      const matchesSearch = glccStr.includes(searchText.toLowerCase());
+      
+      if (!matchesSearch) return false;
+
+      if (filterMode === 'DATE' && startDate) {
+        return row.RECON_RUN_DATE === startDate;
+      }
+
+      if (filterMode === 'RANGE' && startDate && endDate) {
+        return row.RECON_RUN_DATE >= startDate && row.RECON_RUN_DATE <= endDate;
+      }
+
+      if (filterMode === 'CURRENT') {
+        // 'New Entry' ने सुरू होणारे सर्व रेकॉर्ड्स
+        return row.TYPE.startsWith('New Entry');
+      }
+
+      return true;
+    });
+  }, [searchText, startDate, endDate, filterMode]);
+
+  return (
+    <Box sx={{ p: 3, backgroundColor: '#f5f5f5', minHeight: '100vh' }}>
+      <Paper sx={{ p: 2, mb: 3 }}>
+        <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', color: '#1976d2' }}>
+          Reconciliation Data Grid
+        </Typography>
+        
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mt: 2, mb: 2 }}>
+          <TextField
+            size="small"
+            label="Search by GLCC"
+            placeholder="e.g. 14321INR"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
+          
+          <TextField
+            size="small"
+            type="date"
+            label="Start Date / Particular Date"
+            InputLabelProps={{ shrink: true }}
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+          />
+
+          <TextField
+            size="small"
+            type="date"
+            label="End Date"
+            InputLabelProps={{ shrink: true }}
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+          />
+        </Stack>
+
+        <Stack direction="row" spacing={1}>
+          <Button variant="contained" color="primary" onClick={() => setFilterMode('RANGE')}>
+            Search Range
+          </Button>
+          <Button variant="contained" color="secondary" onClick={() => setFilterMode('DATE')}>
+            Particular Date
+          </Button>
+          <Button variant="success" sx={{ bgcolor: 'green', color: 'white', '&:hover': {bgcolor: 'darkgreen'} }} onClick={() => setFilterMode('CURRENT')}>
+            Current Diff
+          </Button>
+          <Button variant="outlined" onClick={() => {
+            setFilterMode('ALL');
+            setSearchText('');
+            setStartDate('');
+            setEndDate('');
+          }}>
+            Reset
+          </Button>
+        </Stack>
+      </Paper>
+
+      <Paper sx={{ height: 500, width: '100%' }}>
+        <DataGrid
+          rows={filteredData}
+          columns={columns}
+          pageSize={10}
+          rowsPerPageOptions={[10, 25, 50]}
+          disableSelectionOnClick
+          sx={{
+            '& .MuiDataGrid-columnHeaders': {
+              backgroundColor: '#e3f2fd',
+              fontWeight: 'bold',
+            },
+          }}
+        />
+      </Paper>
+    </Box>
+  );
+}
