@@ -1,0 +1,132 @@
+import React, { useState } from 'react';
+import { DataGrid, GridToolbarContainer, GridToolbarExport } from '@mui/x-data-grid';
+import { 
+  TextField, Button, Stack, Box, Typography, Paper, 
+  Alert, InputAdornment, IconButton 
+} from '@mui/material';
+import ClearIcon from '@mui/icons-material/Clear';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+
+const dummyData = [
+  { id: 1, RECON_RUN_DATE: '2020-11-20', BRANCH_CODE: '14321', CURRENCY: 'INR', CGL: '2006070601', OBS_BALANCE: 10000, GL_BALANCE: 12000, DIFFERENCE_AMOUNT: 2000, TYPE: 'Old Entry' },
+  { id: 2, RECON_RUN_DATE: '2020-11-22', BRANCH_CODE: '04512', CURRENCY: 'INR', CGL: '1001030606', OBS_BALANCE: 20000, GL_BALANCE: 25000, DIFFERENCE_AMOUNT: 5000, TYPE: 'New Entry LOAN' },
+  { id: 3, RECON_RUN_DATE: '2020-11-23', BRANCH_CODE: '01070', CURRENCY: 'INR', CGL: '7047500101', OBS_BALANCE: 5000, GL_BALANCE: 4500, DIFFERENCE_AMOUNT: -500, TYPE: 'New Entry I/E' },
+  { id: 4, RECON_RUN_DATE: '2020-11-25', BRANCH_CODE: '18509', CURRENCY: 'INR', CGL: '2006070601', OBS_BALANCE: 30000, GL_BALANCE: 30000, DIFFERENCE_AMOUNT: 0, TYPE: 'New Entry PROVISION' },
+];
+
+export default function FincoreReconciliation() {
+  const [glccSearch, setGlccSearch] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [rows, setRows] = useState(dummyData);
+  const [error, setError] = useState('');
+
+  // सर्व फिल्टर्स रिसेट करण्यासाठी
+  const handleReset = () => {
+    setGlccSearch('');
+    setStartDate('');
+    setEndDate('');
+    setRows(dummyData);
+    setError('');
+  };
+
+  // १. Search Range (Max 15 Days)
+  const searchWithRange = () => {
+    setError('');
+    if (!startDate || !endDate) {
+      setError("दोन्ही तारखा निवडणे अनिवार्य आहे.");
+      return;
+    }
+    const diffDays = Math.ceil(Math.abs(new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24));
+    if (diffDays > 15) {
+      setError("तारीख रेंज १५ दिवसांपेक्षा जास्त असू शकत नाही.");
+      return;
+    }
+    const filtered = dummyData.filter(row => {
+      const rowGlcc = `${row.BRANCH_CODE}${row.CURRENCY}${row.CGL}`.toLowerCase();
+      return rowGlcc.includes(glccSearch.toLowerCase()) && row.RECON_RUN_DATE >= startDate && row.RECON_RUN_DATE <= endDate;
+    });
+    setRows(filtered);
+  };
+
+  // २. Search Particular Date
+  const searchParticularDate = () => {
+    setError('');
+    if (!startDate) { setError("तारीख निवडा."); return; }
+    setRows(dummyData.filter(row => row.RECON_RUN_DATE === startDate));
+  };
+
+  // ३. Current Difference (New Entry logic)
+  const searchCurrentDiff = () => {
+    setError('');
+    const newEntryRows = dummyData.filter(row => row.TYPE.toLowerCase().includes('new entry'));
+    if (newEntryRows.length > 0) {
+      const minDate = newEntryRows.map(r => r.RECON_RUN_DATE).sort()[0];
+      setRows(dummyData.filter(row => row.RECON_RUN_DATE >= minDate));
+    } else {
+      setError("New Entry डेटा सापडला नाही.");
+    }
+  };
+
+  // Excel/CSV डाउनलोड फंक्शन (Custom implementation)
+  const handleDownload = () => {
+    const headers = ["GLCC,Date,OBS Balance,GL Balance,Difference,Type"];
+    const csvContent = rows.map(r => `${r.BRANCH_CODE}-${r.CURRENCY}-${r.CGL},${r.RECON_RUN_DATE},${r.OBS_BALANCE},${r.GL_BALANCE},${r.DIFFERENCE_AMOUNT},${r.TYPE}`).join("\n");
+    const blob = new Blob([[headers, csvContent].join("\n")], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Reconciliation_Report.csv';
+    a.click();
+  };
+
+  const columns = [
+    { field: 'glcc', headerName: 'GLCC', width: 220, valueGetter: (v, row) => `${row.BRANCH_CODE}-${row.CURRENCY}-${row.CGL}` },
+    { field: 'RECON_RUN_DATE', headerName: 'Run Date', width: 130 },
+    { field: 'OBS_BALANCE', headerName: 'OBS Balance', width: 130 },
+    { field: 'GL_BALANCE', headerName: 'GL Balance', width: 130 },
+    { field: 'DIFFERENCE_AMOUNT', headerName: 'Difference', width: 130 },
+    { field: 'TYPE', headerName: 'Type', width: 180 },
+  ];
+
+  return (
+    <Box sx={{ p: 3, bgcolor: '#f4f6f8', minHeight: '100vh' }}>
+      <Paper elevation={3} sx={{ p: 3, mb: 3, borderRadius: 3 }}>
+        <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>Search Filters</Typography>
+        
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+        {/* Input Bar with Reset & Download Inside */}
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 3 }} alignItems="center">
+          <TextField 
+            label="GLCC Search" size="small" value={glccSearch} onChange={(e) => setGlccSearch(e.target.value)}
+            InputProps={{
+              endAdornment: glccSearch && (
+                <IconButton size="small" onClick={() => setGlccSearch('')}><ClearIcon fontSize="inherit"/></IconButton>
+              )
+            }}
+          />
+          <TextField type="date" label="Date Select" size="small" InputLabelProps={{ shrink: true }} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <TextField type="date" label="End Date" size="small" InputLabelProps={{ shrink: true }} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          
+          <Button variant="outlined" color="error" onClick={handleReset} startIcon={<RestartAltIcon />}>Reset</Button>
+          <Button variant="outlined" color="primary" onClick={handleDownload} startIcon={<FileDownloadIcon />} disabled={rows.length === 0}>Download</Button>
+        </Stack>
+
+        {/* Action Buttons */}
+        <Stack direction="row" spacing={2} flexWrap="wrap">
+          <Button variant="contained" onClick={searchWithRange}>Search Range (15 Days)</Button>
+          <Button variant="contained" color="secondary" onClick={searchParticularDate}>Search Particular Date</Button>
+          <Button variant="contained" color="success" onClick={searchCurrentDiff}>Current Diff (New Entries)</Button>
+        </Stack>
+      </Paper>
+
+      <Paper elevation={3} sx={{ borderRadius: 3, overflow: 'hidden' }}>
+        <Box sx={{ height: 450, width: '100%' }}>
+          <DataGrid rows={rows} columns={columns} pageSize={10} disableRowSelectionOnClick />
+        </Box>
+      </Paper>
+    </Box>
+  );
+}
