@@ -1,0 +1,149 @@
+import React, { useState } from 'react';
+import { DataGrid, GridToolbarContainer, GridToolbarExport } from '@mui/x-data-grid';
+import { 
+  TextField, Button, Stack, Box, Typography, Paper, 
+  Alert, Divider, IconButton, Tooltip 
+} from '@mui/material';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import SearchIcon from '@mui/icons-material/Search';
+
+// Dummy Data
+const dummyData = [
+  { id: 1, RECON_RUN_DATE: '2020-11-25', BRANCH_CODE: '14321', CURRENCY: 'INR', CGL: '2006070601', OBS_BALANCE: 19960361.99, GL_BALANCE: 44620730.38, DIFFERENCE_AMOUNT: 154985631.60, TYPE: 'New Entry DEPOSITS' },
+  { id: 2, RECON_RUN_DATE: '2020-11-25', BRANCH_CODE: '04512', CURRENCY: 'INR', CGL: '1001030606', OBS_BALANCE: -20653035.15, GL_BALANCE: -15512.5, DIFFERENCE_AMOUNT: -2049790.65, TYPE: 'New Entry LOAN' },
+  { id: 3, RECON_RUN_DATE: '2020-11-22', BRANCH_CODE: '01070', CURRENCY: 'INR', CGL: '7047500101', OBS_BALANCE: 0, GL_BALANCE: 3589.03, DIFFERENCE_AMOUNT: -3589.03, TYPE: 'New Entry I/E' },
+  { id: 4, RECON_RUN_DATE: '2020-11-23', BRANCH_CODE: '01063', CURRENCY: 'INR', CGL: '2028070699', OBS_BALANCE: 0, GL_BALANCE: 1879.99, DIFFERENCE_AMOUNT: -1879.99, TYPE: 'New Entry PROVISION' },
+];
+
+export default function ProfessionalReconUI() {
+  const [glccSearch, setGlccSearch] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [rows, setRows] = useState(dummyData);
+  const [error, setError] = useState('');
+
+  // 15 days check logic
+  const validateAndFilter = (isRange) => {
+    setError('');
+    if (!startDate) { setError('Please select a date'); return; }
+
+    if (isRange) {
+      if (!endDate) { setError('Please select end date'); return; }
+      const diff = Math.ceil(Math.abs(new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24));
+      if (diff > 15) { setError('Max range is 15 days'); return; }
+      
+      const filtered = dummyData.filter(row => 
+        row.RECON_RUN_DATE >= startDate && row.RECON_RUN_DATE <= endDate &&
+        `${row.BRANCH_CODE}${row.CURRENCY}${row.CGL}`.toLowerCase().includes(glccSearch.toLowerCase())
+      );
+      setRows(filtered);
+    } else {
+      const filtered = dummyData.filter(row => row.RECON_RUN_DATE === startDate);
+      setRows(filtered);
+    }
+  };
+
+  const handleCurrentDiff = () => {
+    const newEntryRows = dummyData.filter(row => row.TYPE.toLowerCase().includes('new entry'));
+    if (newEntryRows.length > 0) {
+      const minDate = newEntryRows.map(r => r.RECON_RUN_DATE).sort()[0];
+      setRows(dummyData.filter(row => row.RECON_RUN_DATE >= minDate));
+    }
+  };
+
+  const columns = [
+    { field: 'glcc', headerName: 'GLCC Code', width: 220, valueGetter: (v, row) => `${row.BRANCH_CODE}-${row.CURRENCY}-${row.CGL}` },
+    { field: 'RECON_RUN_DATE', headerName: 'Run Date', width: 130 },
+    { field: 'OBS_BALANCE', headerName: 'OBS Balance', width: 150, type: 'number' },
+    { field: 'GL_BALANCE', headerName: 'GL Balance', width: 150, type: 'number' },
+    { field: 'DIFFERENCE_AMOUNT', headerName: 'Difference', width: 150, type: 'number', cellClassName: (params) => params.value < 0 ? 'negative-val' : 'positive-val' },
+    { field: 'TYPE', headerName: 'Entry Type', width: 200 },
+  ];
+
+  return (
+    <Box sx={{ p: 3, bgcolor: '#F8F9FA', minHeight: '100vh' }}>
+      {/* Header Section */}
+      <Paper elevation={0} sx={{ p: 3, mb: 3, borderRadius: 2, border: '1px solid #E0E0E0' }}>
+        <Typography variant="h5" sx={{ fontWeight: 700, color: '#1A237E', mb: 1 }}>
+          Reconciliation System
+        </Typography>
+        <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
+          Manage and analyze financial differences with GLCC and Date filters.
+        </Typography>
+        
+        <Divider sx={{ mb: 3 }} />
+
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center">
+          <TextField 
+            label="Search GLCC" 
+            variant="outlined" 
+            size="small" 
+            placeholder="e.g. 14321INR"
+            value={glccSearch}
+            onChange={(e) => setGlccSearch(e.target.value)}
+            sx={{ width: 250 }}
+          />
+          <TextField 
+            type="date" label="Start Date" size="small" InputLabelProps={{ shrink: true }} 
+            value={startDate} onChange={(e) => setStartDate(e.target.value)}
+          />
+          <TextField 
+            type="date" label="End Date" size="small" InputLabelProps={{ shrink: true }} 
+            value={endDate} onChange={(e) => setEndDate(e.target.value)}
+          />
+          
+          <Stack direction="row" spacing={1}>
+            <Button variant="contained" startIcon={<SearchIcon />} onClick={() => validateAndFilter(true)} sx={{ borderRadius: 2, bgcolor: '#3949AB' }}>
+              Range Search
+            </Button>
+            <Button variant="outlined" onClick={() => validateAndFilter(false)} sx={{ borderRadius: 2 }}>
+              Particular Date
+            </Button>
+            <Button variant="contained" color="success" onClick={handleCurrentDiff} sx={{ borderRadius: 2 }}>
+              Current Diff
+            </Button>
+            <Tooltip title="Reset All">
+              <IconButton onClick={() => {setRows(dummyData); setGlccSearch(''); setStartDate(''); setEndDate('');}} color="error">
+                <RestartAltIcon />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        </Stack>
+      </Paper>
+
+      {/* Grid Section */}
+      <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid #E0E0E0', overflow: 'hidden' }}>
+        <Box sx={{ height: 500, width: '100%', '& .negative-val': { color: '#D32F2F', fontWeight: 'bold' }, '& .positive-val': { color: '#2E7D32' } }}>
+          <DataGrid 
+            rows={rows} 
+            columns={columns} 
+            pageSize={10}
+            slots={{ toolbar: CustomToolbar }}
+            sx={{
+              border: 0,
+              '& .MuiDataGrid-columnHeaders': {
+                bgcolor: '#F1F3F4',
+                color: '#424242',
+                fontWeight: 'bold',
+                fontSize: '0.9rem'
+              },
+              '& .MuiDataGrid-row:hover': { bgcolor: '#F5F5F5' },
+            }}
+          />
+        </Box>
+      </Paper>
+    </Box>
+  );
+}
+
+// Custom Toolbar with Export Button
+function CustomToolbar() {
+  return (
+    <GridToolbarContainer sx={{ p: 1, bgcolor: '#F1F3F4' }}>
+      <GridToolbarExport startIcon={<FileDownloadIcon />} sx={{ fontWeight: 'bold' }} />
+    </GridToolbarContainer>
+  );
+}
