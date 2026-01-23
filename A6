@@ -1,0 +1,188 @@
+import React, { useState } from 'react';
+import { DataGrid, GridToolbarContainer, GridToolbarExport } from '@mui/x-data-grid';
+import { 
+  TextField, Button, Stack, Box, Typography, Paper, 
+  Alert, Collapse, Tooltip 
+} from '@mui/material';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import SearchIcon from '@mui/icons-material/Search';
+
+// Dummy Data based on Fincore database structure
+const dummyData = [
+  { id: 1, RECON_RUN_DATE: '2020-11-20', BRANCH_CODE: '14321', CURRENCY: 'INR', CGL: '2006070601', OBS_BALANCE: 19960361.99, GL_BALANCE: 44620730.38, DIFFERENCE_AMOUNT: 154985631.60, TYPE: 'Old Entry' },
+  { id: 2, RECON_RUN_DATE: '2020-11-25', BRANCH_CODE: '04512', CURRENCY: 'INR', CGL: '1001030606', OBS_BALANCE: -20653035.15, GL_BALANCE: -15512.5, DIFFERENCE_AMOUNT: -2049790.65, TYPE: 'New Entry LOAN' },
+  { id: 3, RECON_RUN_DATE: '2020-11-22', BRANCH_CODE: '01070', CURRENCY: 'INR', CGL: '7047500101', OBS_BALANCE: 0, GL_BALANCE: 3589.03, DIFFERENCE_AMOUNT: -3589.03, TYPE: 'New Entry I/E' },
+];
+
+export default function ReconDashboard() {
+  const [activeTab, setActiveTab] = useState(null); // 'range', 'particular', 'current'
+  const [rows, setRows] = useState(dummyData);
+  const [glcc, setGlcc] = useState('');
+  const [date1, setDate1] = useState('');
+  const [date2, setDate2] = useState('');
+  const [error, setError] = useState('');
+
+  // Reset function to clear inputs and restore data
+  const resetAll = () => {
+    setGlcc(''); 
+    setDate1(''); 
+    setDate2('');
+    setRows(dummyData); 
+    setError('');
+  };
+
+  // Requirement 1: GLCC + Range Search (Max 15 Days)
+  const handleRangeSearch = () => {
+    setError('');
+    if (!date1 || !date2) {
+      setError("Please select both Start and End dates.");
+      return;
+    }
+    const diffDays = Math.ceil(Math.abs(new Date(date2) - new Date(date1)) / (1000 * 60 * 60 * 24));
+    if (diffDays > 15) {
+      setError("Date range cannot exceed 15 days.");
+      return;
+    }
+
+    const filtered = dummyData.filter(r => {
+      const rowGlcc = `${r.BRANCH_CODE}${r.CURRENCY}${r.CGL}`.toLowerCase();
+      const matchGlcc = rowGlcc.includes(glcc.toLowerCase());
+      const matchDate = r.RECON_RUN_DATE >= date1 && r.RECON_RUN_DATE <= date2;
+      return matchGlcc && matchDate;
+    });
+    setRows(filtered);
+  };
+
+  // Requirement 2: Particular Date Search
+  const handleParticularSearch = () => {
+    setError('');
+    if (!date1) {
+      setError("Please select a date in 'Date Select'.");
+      return;
+    }
+    const filtered = dummyData.filter(r => {
+      const rowGlcc = `${r.BRANCH_CODE}${r.CURRENCY}${r.CGL}`.toLowerCase();
+      return rowGlcc.includes(glcc.toLowerCase()) && r.RECON_RUN_DATE === date1;
+    });
+    setRows(filtered);
+  };
+
+  // Requirement 3: Current Difference (From first New Entry onwards)
+  const handleCurrentDiff = () => {
+    setActiveTab('current');
+    setError('');
+    const newEntries = dummyData.filter(r => r.TYPE.toLowerCase().includes('new entry'));
+    if (newEntries.length > 0) {
+      const minDate = newEntries.map(r => r.RECON_RUN_DATE).sort()[0];
+      setRows(dummyData.filter(r => r.RECON_RUN_DATE >= minDate));
+    } else {
+      setError("No 'New Entry' records found.");
+    }
+  };
+
+  const columns = [
+    { field: 'glcc', headerName: 'GLCC (Branch-Curr-CGL)', flex: 1, valueGetter: (v, row) => `${row.BRANCH_CODE}-${row.CURRENCY}-${row.CGL}` },
+    { field: 'RECON_RUN_DATE', headerName: 'Run Date', width: 150 },
+    { field: 'OBS_BALANCE', headerName: 'OBS Balance', width: 150, type: 'number' },
+    { field: 'GL_BALANCE', headerName: 'GL Balance', width: 150, type: 'number' },
+    { field: 'DIFFERENCE_AMOUNT', headerName: 'Difference', width: 150, type: 'number' },
+    { field: 'TYPE', headerName: 'Entry Type', flex: 1 },
+  ];
+
+  return (
+    <Box sx={{ p: 4, bgcolor: '#f8f9fa', minHeight: '100vh' }}>
+      <Typography variant="h4" sx={{ mb: 4, fontWeight: 'bold', color: '#1a237e', textAlign: 'center' }}>
+        Fincore Reconciliation Dashboard
+      </Typography>
+
+      {/* Main Action Buttons */}
+      <Stack direction="row" spacing={3} justifyContent="center" sx={{ mb: 4 }}>
+        <Button 
+          variant="contained" size="large" sx={{ px: 4, bgcolor: '#1976d2' }}
+          onClick={() => { setActiveTab('range'); resetAll(); }}
+        >
+          SEARCH RANGE (15 DAYS)
+        </Button>
+        <Button 
+          variant="contained" size="large" sx={{ px: 4, bgcolor: '#9c27b0' }}
+          onClick={() => { setActiveTab('particular'); resetAll(); }}
+        >
+          SEARCH PARTICULAR DATE
+        </Button>
+        <Button 
+          variant="contained" size="large" sx={{ px: 4, bgcolor: '#2e7d32' }}
+          onClick={handleCurrentDiff}
+        >
+          CURRENT DIFF (NEW ENTRIES)
+        </Button>
+      </Stack>
+
+      {/* Expandable Search Panel */}
+      <Box sx={{ maxWidth: 1000, mx: 'auto', mb: 4 }}>
+        <Collapse in={activeTab === 'range' || activeTab === 'particular'}>
+          <Paper elevation={4} sx={{ p: 3, borderRadius: 3, borderTop: `5px solid ${activeTab === 'range' ? '#1976d2' : '#9c27b0'}` }}>
+            <Typography variant="h6" gutterBottom>
+              {activeTab === 'range' ? 'Search by GLCC & Date Range' : 'Search by GLCC & Specific Date'}
+            </Typography>
+            
+            <Stack direction="row" spacing={2} alignItems="center">
+              <TextField 
+                label="GLCC Search" size="small" sx={{ width: 250 }}
+                value={glcc} onChange={(e) => setGlcc(e.target.value)} 
+              />
+              <TextField 
+                type="date" label="Date Select" size="small" InputLabelProps={{ shrink: true }} 
+                value={date1} onChange={(e) => setDate1(e.target.value)} 
+              />
+              {activeTab === 'range' && (
+                <TextField 
+                  type="date" label="End Date" size="small" InputLabelProps={{ shrink: true }} 
+                  value={date2} onChange={(e) => setDate2(e.target.value)} 
+                />
+              )}
+              
+              <Button variant="contained" startIcon={<SearchIcon />} onClick={activeTab === 'range' ? handleRangeSearch : handleParticularSearch}>
+                Run Search
+              </Button>
+              
+              <Tooltip title="Reset Filters">
+                <Button variant="outlined" color="error" onClick={resetAll}>
+                  <RestartAltIcon />
+                </Button>
+              </Tooltip>
+            </Stack>
+
+            {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
+          </Paper>
+        </Collapse>
+      </Paper>
+
+      {/* Full Width DataGrid */}
+      <Paper elevation={2} sx={{ width: '100%', borderRadius: 2, overflow: 'hidden' }}>
+        <Box sx={{ height: 550, width: '100%' }}>
+          <DataGrid 
+            rows={rows} 
+            columns={columns} 
+            pageSize={10}
+            disableRowSelectionOnClick
+            slots={{ toolbar: () => (
+              <GridToolbarContainer sx={{ p: 1, bgcolor: '#f1f3f4', borderBottom: '1px solid #e0e0e0' }}>
+                <GridToolbarExport startIcon={<FileDownloadIcon />} sx={{ fontWeight: 'bold' }} />
+                <Typography variant="body2" sx={{ ml: 'auto', color: 'text.secondary', pr: 2 }}>
+                  Total Records: {rows.length}
+                </Typography>
+              </GridToolbarContainer>
+            )}}
+            sx={{
+              '& .MuiDataGrid-columnHeaders': {
+                backgroundColor: '#e3f2fd',
+                fontWeight: 'bold'
+              }
+            }}
+          />
+        </Box>
+      </Paper>
+    </Box>
+  );
+}
