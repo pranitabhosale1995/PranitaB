@@ -1,0 +1,203 @@
+import React, { useState, useEffect } from 'react';
+import { DataGrid, GridToolbarContainer, GridToolbarExport, gridClasses } from '@mui/x-data-grid';
+import { 
+  TextField, Box, Typography, Paper, 
+  Alert, Collapse, Stack, alpha, Button, Divider
+} from '@mui/material';
+
+// --- Icons ---
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import DateRangeIcon from '@mui/icons-material/DateRange';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import HistoryIcon from '@mui/icons-material/History';
+
+// --- Test Data Generation ---
+const generateTestData = () => {
+  const data = [];
+  const entryTypes = ['Old Entry', 'New Entry LOAN', 'New Entry DEPOSITS', 'New Entry I/E'];
+  for (let i = 1; i <= 60; i++) {
+    const day = String((i % 28) + 1).padStart(2, '0');
+    const month = i > 30 ? '12' : '11';
+    data.push({
+      id: i,
+      RECON_RUN_DATE: `2020-${month}-${day}`,
+      BRANCH_CODE: `B00${100 + i}`,
+      CURRENCY: 'INR',
+      CGL: `9900${500 + i}`,
+      OBS_BALANCE: (Math.random() * 500000).toFixed(2),
+      GL_BALANCE: (Math.random() * 500000).toFixed(2),
+      DIFFERENCE_AMOUNT: (Math.random() * 10000).toFixed(2) * (i % 5 === 0 ? -1 : 1),
+      TYPE: i > 40 ? entryTypes[i % 4] : 'Old Entry',
+    });
+  }
+  return data;
+};
+
+const dummyData = generateTestData();
+
+export default function FincoreReconDashboard() {
+  const [activeTab, setActiveTab] = useState(null); // 'range', 'particular', 'current'
+  const [rows, setRows] = useState(dummyData);
+  const [date1, setDate1] = useState('');
+  const [date2, setDate2] = useState('');
+  const [error, setError] = useState('');
+
+  // Reset function used inside expanded panels
+  const resetFilters = () => {
+    setDate1(''); 
+    setDate2('');
+    setRows(dummyData); 
+    setError('');
+  };
+
+  // Logic: Current Difference (Automatic date filter based on 'New Entry')
+  const applyCurrentDiff = () => {
+    setActiveTab('current');
+    setError('');
+    const newEntries = dummyData.filter(r => r.TYPE.toLowerCase().includes('new entry'));
+    if (newEntries.length > 0) {
+      const earliestDate = newEntries.map(r => r.RECON_RUN_DATE).sort()[0];
+      const today = new Date().toISOString().split('T')[0];
+      setRows(dummyData.filter(r => r.RECON_RUN_DATE >= earliestDate && r.RECON_RUN_DATE <= today));
+    } else {
+      setRows([]);
+      setError("No 'New Entry' records found.");
+    }
+  };
+
+  // Auto-filtering on Date change
+  useEffect(() => {
+    if (activeTab === 'range') {
+        if (!date1 || !date2) return;
+        const diff = Math.ceil(Math.abs(new Date(date2) - new Date(date1)) / (1000 * 60 * 60 * 24));
+        if (diff > 15) {
+            setError("Date range is restricted to 15 days.");
+            setRows([]);
+        } else {
+            setError('');
+            setRows(dummyData.filter(r => r.RECON_RUN_DATE >= date1 && r.RECON_RUN_DATE <= date2));
+        }
+    } else if (activeTab === 'particular') {
+        if (!date1) return;
+        setError('');
+        setRows(dummyData.filter(r => r.RECON_RUN_DATE === date1));
+    }
+  }, [date1, date2, activeTab]);
+
+  const columns = [
+    { field: 'glcc', headerName: 'GLCC Code', flex: 1.5, minWidth: 220, valueGetter: (v, row) => `${row.BRANCH_CODE}-${row.CURRENCY}-${row.CGL}` },
+    { field: 'RECON_RUN_DATE', headerName: 'Run Date', flex: 1, minWidth: 130 },
+    { field: 'OBS_BALANCE', headerName: 'OBS Balance', flex: 1, minWidth: 150, align: 'right' },
+    { field: 'GL_BALANCE', headerName: 'GL Balance', flex: 1, minWidth: 150, align: 'right' },
+    { 
+      field: 'DIFFERENCE_AMOUNT', headerName: 'Difference', flex: 1, minWidth: 150, align: 'right',
+      cellClassName: (params) => params.value < 0 ? 'text-red' : 'text-green'
+    },
+    { field: 'TYPE', headerName: 'Entry Type', flex: 1.5, minWidth: 200 },
+  ];
+
+  return (
+    <Box sx={{ p: 4, bgcolor: '#f4f7f9', minHeight: '100vh' }}>
+      
+      {/* Header Area */}
+      <Box sx={{ mb: 4 }}>
+          <Typography variant="h4" sx={{ fontWeight: 800, color: '#102a43' }}>Reconciliation System</Typography>
+          <Typography variant="body1" color="textSecondary">Manage and monitor financial differences</Typography>
+      </Box>
+
+      {/* Main Selection Tiles */}
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} sx={{ mb: 3 }}>
+        <ActionTile 
+          title="Search Range" icon={<DateRangeIcon />} color="#1976d2" 
+          active={activeTab === 'range'} onClick={() => { setActiveTab('range'); resetFilters(); }} 
+        />
+        <ActionTile 
+          title="Particular Date" icon={<EventAvailableIcon />} color="#7b1fa2" 
+          active={activeTab === 'particular'} onClick={() => { setActiveTab('particular'); resetFilters(); }} 
+        />
+        <ActionTile 
+          title="Current Difference" icon={<HistoryIcon />} color="#2e7d32" 
+          active={activeTab === 'current'} onClick={applyCurrentDiff} 
+        />
+      </Stack>
+
+      {/* Expandable Search Panels (GLCC Removed, Reset Added) */}
+      <Collapse in={activeTab === 'range' || activeTab === 'particular'}>
+        <Paper elevation={0} sx={{ p: 3, mb: 3, borderRadius: 4, border: '1px solid #d9e2ec' }}>
+          <Stack direction="row" spacing={3} alignItems="center">
+            <Typography variant="subtitle1" sx={{ fontWeight: 700, minWidth: 150 }}>
+                {activeTab === 'range' ? 'Select Range:' : 'Select Date:'}
+            </Typography>
+            
+            <TextField 
+                type="date" label="Date Select" size="small" sx={{ width: 220 }}
+                InputLabelProps={{ shrink: true }} 
+                value={date1} onChange={(e) => setDate1(e.target.value)} 
+            />
+            
+            {activeTab === 'range' && (
+                <TextField 
+                    type="date" label="End Date" size="small" sx={{ width: 220 }}
+                    InputLabelProps={{ shrink: true }} 
+                    value={date2} onChange={(e) => setDate2(e.target.value)} 
+                />
+            )}
+
+            <Divider orientation="vertical" flexItem />
+
+            <Button 
+                variant="outlined" 
+                color="error" 
+                startIcon={<RestartAltIcon />} 
+                onClick={resetFilters}
+                sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 700 }}
+            >
+                Reset Search
+            </Button>
+          </Stack>
+          {error && <Alert severity="error" sx={{ mt: 2, borderRadius: 2 }}>{error}</Alert>}
+        </Paper>
+      </Collapse>
+
+      {/* Professional DataGrid (Full Width) */}
+      <Paper elevation={0} sx={{ width: '100%', borderRadius: 4, border: '1px solid #d9e2ec', overflow: 'hidden' }}>
+        <Box sx={{ 
+          height: 600, width: '100%',
+          '& .text-red': { color: '#d32f2f', fontWeight: 'bold' },
+          '& .text-green': { color: '#2e7d32', fontWeight: 'bold' }
+        }}>
+          <DataGrid 
+            rows={rows} columns={columns} 
+            pageSizeOptions={[10, 20]}
+            initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+            slots={{ toolbar: () => (
+              <GridToolbarContainer sx={{ p: 2, bgcolor: '#f8fafc', borderBottom: '1px solid #d9e2ec' }}>
+                <Typography variant="subtitle2" sx={{flexGrow: 1, fontWeight: 700, color: '#486581'}}>DATABASE RECORDS</Typography>
+                <GridToolbarExport startIcon={<FileDownloadIcon />} sx={{ fontWeight: 700 }} />
+              </GridToolbarContainer>
+            )}}
+            sx={{ border: 0, [`& .${gridClasses.columnHeader}`]: { bgcolor: '#f8fafc' } }}
+          />
+        </Box>
+      </Paper>
+    </Box>
+  );
+}
+
+// Custom Component for Selection Tiles
+function ActionTile({ title, icon, color, active, onClick }) {
+  return (
+    <Paper onClick={onClick} sx={{ 
+      p: 2.5, flex: 1, cursor: 'pointer', borderRadius: 4, transition: '0.3s',
+      border: active ? `2px solid ${color}` : '1px solid #d9e2ec',
+      bgcolor: active ? alpha(color, 0.05) : '#fff',
+      '&:hover': { transform: 'translateY(-3px)', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }
+    }}>
+      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+        <Box sx={{ p: 1, bgcolor: alpha(color, 0.1), color: color, borderRadius: 2, display: 'flex' }}>{icon}</Box>
+        <Typography variant="h6" sx={{ ml: 2, fontWeight: 700, color: '#102a43' }}>{title}</Typography>
+      </Box>
+    </Paper>
+  );
+}
