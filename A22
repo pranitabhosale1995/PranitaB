@@ -1,0 +1,226 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { DataGrid, GridToolbarContainer, gridClasses } from '@mui/x-data-grid';
+import { 
+  TextField, Box, Typography, Paper, Collapse, Stack, 
+  Button, Divider, Dialog, DialogTitle, DialogContent, IconButton, alpha 
+} from '@mui/material';
+
+// Existing utility for Excel download
+import downloadFile from '../utils/DownloadUtils'; 
+
+// Icons
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import DateRangeIcon from '@mui/icons-material/DateRange';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import HistoryIcon from '@mui/icons-material/History';
+import CloseIcon from '@mui/icons-material/Close';
+
+// --- Updated Dummy Data Generator with Diverse Dates (2020 - 2026) ---
+const generateData = () => {
+  const data = [];
+  const years = ['2020', '2021', '2022', '2023', '2024', '2025', '2026'];
+  for (let i = 1; i <= 60; i++) {
+    const year = years[i % years.length];
+    const month = String((i % 12) + 1).padStart(2, '0');
+    const day = String((i % 28) + 1).padStart(2, '0');
+    
+    data.push({
+      id: i,
+      FIRST_ERROR_DATE: `${year}-01-01`,
+      REPORT_DATE: `${year}-${month}-${day}`, // Diverse dates added here
+      BRANCH_CODE: `B10${i}`,
+      CURRENCY: 'INR',
+      CGL: `9900${i}`,
+      CBS_BALANCE: (Math.random() * 1000000).toFixed(2),
+      GL_BALANCE: (Math.random() * 1000000).toFixed(2),
+      DIFFERENCE_AMOUNT: (Math.random() * 5000).toFixed(2),
+      DIFF_YESTERDAY: (Math.random() * 800).toFixed(2),
+      TYPE: i % 4 === 0 ? 'New Entry' : 'Old Entry',
+      HEAD: i % 2 === 0 ? 'ASSET' : 'LIABILITY',
+      HAS_HISTORY: i % 3 === 0 
+    });
+  }
+  return data;
+};
+
+const dummyData = generateData();
+
+function CustomToolbar() {
+  return (
+    <GridToolbarContainer sx={{ p: 2, bgcolor: '#f1f5f9', borderBottom: '1px solid #e2e8f0' }}>
+      <Typography variant="caption" sx={{ fontWeight: 700, color: '#64748b', letterSpacing: 1.2 }}>
+        AUDIT LOG DATASETS
+      </Typography>
+    </GridToolbarContainer>
+  );
+}
+
+export default function FincoreDashboard() {
+  const [activeTab, setActiveTab] = useState(null); 
+  const [rows, setRows] = useState(dummyData);
+  const [glcc, setGlcc] = useState('');
+  const [date1, setDate1] = useState('');
+  const [date2, setDate2] = useState('');
+  const [openPopup, setOpenPopup] = useState(false);
+  const [selectedRow, setSelectedRow] = useState(null);
+
+  const handleTabClick = (tabName) => {
+    if (activeTab === tabName) { setActiveTab(null); resetFilters(); } 
+    else { setActiveTab(tabName); resetFilters(); setActiveTab(tabName); }
+  };
+
+  const resetFilters = () => {
+    setGlcc(''); setDate1(''); setDate2('');
+    setRows(dummyData); setActiveTab(null);
+  };
+
+  const handleDownload = () => {
+    if (rows.length === 0) return;
+    const fileData = JSON.stringify(rows); 
+    downloadFile(fileData, 'xlsx', 'Reconciliation_Report', false);
+  };
+
+  // Automatic Search Logic
+  useEffect(() => {
+    let filtered = [...dummyData];
+    if (activeTab === 'particular' && date1) {
+      filtered = filtered.filter(r => r.REPORT_DATE === date1);
+    } else if (activeTab === 'range' && date1 && date2) {
+      filtered = filtered.filter(r => r.REPORT_DATE >= date1 && r.REPORT_DATE <= date2);
+    } else if (activeTab === 'current' && glcc) {
+      filtered = filtered.filter(r => 
+        `${r.BRANCH_CODE}${r.CURRENCY}${r.CGL}`.toLowerCase().includes(glcc.toLowerCase())
+      );
+    }
+    setRows(filtered);
+  }, [glcc, date1, date2, activeTab]);
+
+  const columns = useMemo(() => [
+    { field: 'FIRST_ERROR_DATE', headerName: 'First Error Date', flex: 1, minWidth: 150 },
+    { field: 'REPORT_DATE', headerName: 'Report_DATE', flex: 1, minWidth: 130 },
+    { 
+      field: 'GLCC', 
+      headerName: 'GLCC', 
+      flex: 1.5, 
+      minWidth: 220,
+      valueGetter: (params) => {
+        const target = params.row;
+        // No dashes as requested
+        return target ? `${target.BRANCH_CODE}${target.CURRENCY}${target.CGL}` : "";
+      }
+    },
+    { field: 'CBS_BALANCE', headerName: 'CBS_BALANCE', flex: 1, minWidth: 140, align: 'right' },
+    { field: 'GL_BALANCE', headerName: 'GL_BALANCE', flex: 1, minWidth: 140, align: 'right' },
+    { field: 'DIFFERENCE_AMOUNT', headerName: 'DIFFERENCE_AMOUNT', flex: 1, minWidth: 150, align: 'right' }, 
+    { field: 'DIFF_YESTERDAY', headerName: 'DIFFERence Between YESTERDAY', flex: 1.2, minWidth: 220, align: 'right' },
+    { field: 'TYPE', headerName: 'TYPE', flex: 1, minWidth: 120 },
+    { field: 'HEAD', headerName: 'HEAD', flex: 1, minWidth: 100 },
+    {
+      field: 'actions',
+      headerName: 'Audit',
+      flex: 1, minWidth: 130, sortable: false,
+      renderCell: (params) => (
+        <Button 
+          variant="text" size="small" startIcon={<HistoryIcon />}
+          onClick={() => { setSelectedRow(params.row); setOpenPopup(true); }}
+          sx={{ fontWeight: 700, color: '#334155', '&:hover': { bgcolor: alpha('#334155', 0.1) } }}
+        >
+          Details
+        </Button>
+      )
+    }
+  ], []);
+
+  return (
+    <Box sx={{ p: 4, bgcolor: '#f8fafc', minHeight: '100vh' }}>
+      
+      {/* Quick Search Categories */}
+      <Stack direction="row" spacing={2} sx={{ mb: 4 }}>
+        {[
+          { id: 'particular', label: 'Particular Date', icon: <EventAvailableIcon />, color: '#6366f1' },
+          { id: 'current', label: 'Current Difference', icon: <HistoryIcon />, color: '#10b981' },
+          { id: 'range', label: 'Search Range', icon: <DateRangeIcon />, color: '#3b82f6' }
+        ].map((btn) => (
+          <Button
+            key={btn.id}
+            variant={activeTab === btn.id ? "contained" : "outlined"}
+            onClick={() => handleTabClick(btn.id)}
+            startIcon={btn.icon}
+            sx={{ 
+              flex: 1, py: 1.5, borderRadius: '12px', fontWeight: 800, textTransform: 'none',
+              boxShadow: activeTab === btn.id ? `0 4px 12px ${alpha(btn.color, 0.4)}` : 'none',
+              borderColor: btn.color, color: activeTab === btn.id ? '#fff' : btn.color,
+              bgcolor: activeTab === btn.id ? btn.color : 'transparent',
+              '&:hover': { bgcolor: activeTab === btn.id ? btn.color : alpha(btn.color, 0.05), borderColor: btn.color }
+            }}
+          >
+            {btn.label}
+          </Button>
+        ))}
+      </Stack>
+
+      {/* Dynamic Search Filters */}
+      <Collapse in={activeTab !== null}>
+        <Paper elevation={0} sx={{ p: 3, mb: 4, borderRadius: '16px', border: '1px solid #e2e8f0', bgcolor: '#fff' }}>
+          <Stack direction="row" spacing={3} alignItems="center">
+            {(activeTab === 'current' || activeTab === 'range') && (
+              <TextField label="GLCC Filter" variant="filled" size="small" sx={{ width: 250 }} value={glcc} onChange={(e) => setGlcc(e.target.value)} />
+            )}
+            <TextField type="date" label="Report Date" variant="filled" size="small" InputLabelProps={{ shrink: true }} value={date1} onChange={(e) => setDate1(e.target.value)} sx={{ width: 180 }} />
+            {activeTab === 'range' && (
+              <TextField type="date" label="End Date" variant="filled" size="small" InputLabelProps={{ shrink: true }} value={date2} onChange={(e) => setDate2(e.target.value)} sx={{ width: 180 }} />
+            )}
+            <Divider orientation="vertical" flexItem />
+            <Button variant="outlined" color="error" startIcon={<RestartAltIcon />} onClick={resetFilters} sx={{ borderRadius: '8px' }}>Reset</Button>
+            <Button variant="contained" startIcon={<FileDownloadIcon />} onClick={handleDownload} sx={{ borderRadius: '8px', bgcolor: '#1e293b', '&:hover': {bgcolor: '#334155'} }}>Excel Export</Button>
+          </Stack>
+        </Paper>
+      </Collapse>
+
+      <Paper elevation={0} sx={{ borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', bgcolor: '#fff' }}>
+        <Box sx={{ height: 650, width: '100%' }}>
+          <DataGrid 
+            rows={rows} columns={columns} slots={{ toolbar: CustomToolbar }}
+            pageSizeOptions={[10, 20, 50]}
+            initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+            sx={{ 
+              border: 0, 
+              [`& .${gridClasses.columnHeader}`]: { bgcolor: '#f8fafc', color: '#475569', fontWeight: 800, textTransform: 'uppercase', fontSize: '0.75rem' },
+              [`& .${gridClasses.cell}`]: { borderBottom: '1px solid #f1f5f9' }
+            }}
+          />
+        </Box>
+      </Paper>
+
+      {/* History Popup Logic */}
+      <Dialog open={openPopup} onClose={() => setOpenPopup(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 3, pt: 3 }}>
+          <Typography variant="h6" sx={{ fontWeight: 800 }}>Audit History</Typography>
+          <IconButton onClick={() => setOpenPopup(false)}><CloseIcon /></IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pb: 3 }}>
+          {selectedRow?.HAS_HISTORY ? (
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              <Box sx={{ p: 2, bgcolor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                <Typography variant="caption" color="textSecondary" sx={{ fontWeight: 700 }}>SELECTED ENTITY</Typography>
+                <Typography variant="body1" sx={{ fontWeight: 800 }}>
+                  {`${selectedRow.BRANCH_CODE}${selectedRow.CURRENCY}${selectedRow.CGL}`}
+                </Typography>
+              </Box>
+              <Typography variant="body2" sx={{ color: '#475569', lineHeight: 1.6 }}>
+                Reconciliation logs show recurring discrepancies for this entity in the {selectedRow.HEAD} head. Verification against historical records from {selectedRow.FIRST_ERROR_DATE} is required.
+              </Typography>
+            </Stack>
+          ) : (
+            <Box sx={{ py: 6, textAlign: 'center' }}>
+              <HistoryIcon sx={{ fontSize: 50, color: '#cbd5e1', mb: 2 }} />
+              <Typography variant="h6" sx={{ fontWeight: 700, color: '#64748b' }}>No history available</Typography>
+              <Typography variant="body2" color="textSecondary">No prior audit records or difference logs were found for this entity.</Typography>
+            </Box>
+          )}
+        </DialogContent>
+      </Dialog>
+    </Box>
+  );
+}
