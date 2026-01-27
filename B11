@@ -1,0 +1,43 @@
+// 1. Updated fetchEtlDate to not overwrite the default state globally
+useEffect(() => {
+    const fetchEtlDate = async () => {
+        try {
+            const response = await axios.get('/PS/api/fincore-date');
+            if (response.data.success) {
+                const systemDate = response.data.data.etlDate;
+                // Only set date1 if the user hasn't selected anything or is specifically on Particular Date
+                setDate1(systemDate); 
+            }
+        } catch (error) {
+            console.error("Error fetching system date:", error);
+        }
+    };
+    fetchEtlDate();
+}, []);
+
+// 2. Updated Automatic Search Logic to isolate etlDate for 'particular' tab
+useEffect(() => {
+    let filtered = [...mockRows];
+
+    if (activeTab === 'particular') {
+        // In "Particular Date", we use date1 (which contains the etlDate by default)
+        if (date1) {
+            filtered = filtered.filter(r => r.REPORT_DATE === date1);
+        }
+    } else if (activeTab === 'range') {
+        // In Search Range, isolate from default system date unless both dates are picked
+        if (date1 && date2) {
+            filtered = filtered.filter(r => r.REPORT_DATE >= date1 && r.REPORT_DATE <= date2);
+        }
+    } else if (activeTab === 'current') {
+        // Current Difference ignores date1 (etlDate) and focuses on GLCC
+        if (glcc) {
+            const search = glcc.toLowerCase();
+            filtered = filtered.filter(r => 
+                `${r.BRANCH_CODE}${r.CURRENCY}${r.CGL}`.toLowerCase().includes(search)
+            );
+        }
+    }
+
+    setRows(filtered);
+}, [glcc, date1, date2, activeTab]);
