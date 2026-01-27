@@ -1,0 +1,195 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import axios from 'axios'; 
+import { DataGrid, gridClasses } from '@mui/x-data-grid';
+import { 
+  Box, Typography, Paper, Stack, Button, Divider, TextField,
+  Dialog, DialogTitle, DialogContent, IconButton, alpha, Grid, Collapse, CircularProgress
+} from '@mui/material';
+
+// Standard project utility for file downloads
+import downloadFile from '../../utils/DownloadUtils'; 
+
+// Icons
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import HistoryIcon from '@mui/icons-material/History';
+import CloseIcon from '@mui/icons-material/Close';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+
+export default function BalanceCompareDifferenceScreen() {
+  const [activeTab, setActiveTab] = useState(null); 
+  const [rows, setRows] = useState([]); // Mock data removed
+  const [loading, setLoading] = useState(false);
+  const [glcc, setGlcc] = useState('');
+  const [date1, setDate1] = useState(''); 
+  const [date2, setDate2] = useState('');
+  const [systemEtlDate, setSystemEtlDate] = useState(''); 
+  const [openPopup, setOpenPopup] = useState(false);
+  const [selectedRow, setSelectedRow] = useState(null);
+
+  // --- 1. Fetch System Date (ETL Date) on mount ---
+  useEffect(() => {
+    const fetchEtlDate = async () => {
+      try {
+        const response = await axios.get('/PS/api/fincore-date');
+        if (response.data.success) {
+          setSystemEtlDate(response.data.data.etlDate);
+        }
+      } catch (error) {
+        console.error("ETL Date fetch error:", error);
+      }
+    };
+    fetchEtlDate();
+  }, []);
+
+  // --- 2. Fetch Actual Difference Data ---
+  const fetchDifferenceData = async () => {
+    setLoading(true);
+    // Logging for console check
+    console.log("Calling New API with params:", { date: date1, glcc: glcc }); 
+
+    try {
+      // Updated to your new API URL
+      const response = await axios.get('http://localhost:9005/api/differences', {
+        params: {
+          page: 0,
+          size: 10,
+          reportDate: date1,
+          glccFilter: glcc
+        }
+      });
+
+      console.log("New API Response Data:", response.data);
+
+      // Mapping the data to match your table columns
+      const mappedRows = response.data.map((item, index) => ({
+        ...item,
+        id: index + 1, // Unique ID for DataGrid
+        REPORT_DATE: item.balanceDate,
+        CBS_BALANCE: item.balance,
+        GLCC_DISPLAY: `${item.branchCode}${item.currency}${item.cgl}`,
+        // Empty columns as requested
+        FIRST_ERROR_DATE: '',
+        GL_BALANCE: '',
+        DIFFERENCE_AMOUNT: '',
+        DIFF_YESTERDAY: '',
+        TYPE: 'Old Entry',
+        HEAD: 'ASSET'
+      }));
+
+      setRows(mappedRows);
+    } catch (error) {
+      console.error("Difference API Error:", error);
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Trigger API when filters change
+  useEffect(() => {
+    if (activeTab) {
+      fetchDifferenceData(); 
+    }
+  }, [glcc, date1, activeTab]);
+
+  const handleTabClick = (tab) => {
+    if (activeTab === tab) {
+      setActiveTab(null);
+      resetFilters();
+    } else {
+      setActiveTab(tab);
+      setGlcc('');
+      setDate2('');
+      // Isolating system date to 'particular' tab only
+      if (tab === 'particular') {
+        setDate1(systemEtlDate);
+      } else {
+        setDate1('');
+      }
+    }
+  };
+
+  const resetFilters = () => {
+    setGlcc(''); setDate1(''); setDate2('');
+    setRows([]);
+  };
+
+  const columns = useMemo(() => [
+    { field: 'FIRST_ERROR_DATE', headerName: 'First Error Date', flex: 1, minWidth: 150 },
+    { field: 'REPORT_DATE', headerName: 'Report_DATE', flex: 1, minWidth: 130 },
+    { 
+      field: 'GLCC', headerName: 'GLCC', flex: 1.5, minWidth: 180,
+      valueGetter: (v, row) => {
+        const target = row || v?.row || v;
+        return target?.GLCC_DISPLAY || "";
+      }
+    },
+    { field: 'CBS_BALANCE', headerName: 'CBS_BALANCE', flex: 1, align: 'right' },
+    { field: 'GL_BALANCE', headerName: 'GL_BALANCE', flex: 1, align: 'right' },
+    { field: 'DIFFERENCE_AMOUNT', headerName: 'DIFFERENCE_AMOUNT', flex: 1, align: 'right' }, 
+    { field: 'DIFF_YESTERDAY', headerName: 'DIFFerence Between YESTERDAY', flex: 1.2, align: 'right' },
+    { field: 'TYPE', headerName: 'TYPE', flex: 1 },
+    { field: 'HEAD', headerName: 'HEAD', flex: 1 },
+    {
+      field: 'actions', headerName: 'Details', flex: 0.8, minWidth: 100, sortable: false,
+      renderCell: (params) => (
+        params.row?.TYPE !== 'New Entry' && (
+          <IconButton size="small" color="primary" onClick={() => { setSelectedRow(params.row); setOpenPopup(true); }}>
+            <HistoryIcon fontSize="small" />
+          </IconButton>
+        )
+      )
+    }
+  ], []);
+
+  return (
+    <Box sx={{ p: 3, bgcolor: '#f4f7f9', minHeight: '100vh' }}>
+      <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+        {['particular', 'current', 'range'].map((tab) => (
+          <Button 
+            key={tab} variant={activeTab === tab ? "contained" : "outlined"} onClick={() => handleTabClick(tab)}
+            sx={{ flex: 1, textTransform: 'none', borderRadius: '12px', fontWeight: 700, py: 1.5 }}
+          >
+            {tab === 'particular' ? 'Particular Date' : tab === 'current' ? 'Current Difference' : 'Search Range'}
+          </Button>
+        ))}
+      </Stack>
+
+      <Collapse in={activeTab !== null}>
+        <Paper elevation={0} sx={{ p: 3, mb: 3, borderRadius: '12px', border: '1px solid #e0e4e8', bgcolor: '#fff' }}>
+          <Stack direction="row" spacing={3} alignItems="center">
+            {(activeTab === 'current' || activeTab === 'range') && (
+              <TextField label="GLCC Filter" size="small" sx={{ width: 250 }} value={glcc} onChange={(e) => setGlcc(e.target.value)} />
+            )}
+            <TextField type="date" label="Report Date" size="small" InputLabelProps={{ shrink: true }} value={date1} onChange={(e) => setDate1(e.target.value)} sx={{ width: 180 }} />
+            {activeTab === 'range' && (
+              <TextField type="date" label="End Date" size="small" InputLabelProps={{ shrink: true }} value={date2} onChange={(e) => setDate2(e.target.value)} sx={{ width: 180 }} />
+            )}
+            <Divider orientation="vertical" flexItem />
+            <Button variant="outlined" color="error" startIcon={<RestartAltIcon />} onClick={resetFilters}>Reset</Button>
+            <Button variant="contained" startIcon={<FileDownloadIcon />} onClick={() => downloadFile(JSON.stringify(rows), 'xlsx', 'Report', false)} sx={{ bgcolor: '#1e293b' }}>Export</Button>
+          </Stack>
+        </Paper>
+      </Collapse>
+
+      <Paper elevation={0} sx={{ borderRadius: '12px', border: '1px solid #e0e4e8', overflow: 'hidden', position: 'relative' }}>
+        {loading && (
+          <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 10 }}>
+            <CircularProgress />
+          </Box>
+        )}
+        <Box sx={{ height: 600, width: '100%', opacity: loading ? 0.5 : 1 }}>
+          <DataGrid 
+            rows={rows} columns={columns} 
+            pageSizeOptions={[10, 25, 50]}
+            initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+            getRowId={(row) => row.id}
+            disableRowSelectionOnClick
+            sx={{ border: 0, [`& .${gridClasses.columnHeader}`]: { bgcolor: '#f8f9fa', fontWeight: 700 } }}
+          />
+        </Box>
+      </Paper>
+      {/* Popup Code stays the same as your screenshot */}
+    </Box>
+  );
+}
