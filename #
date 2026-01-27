@@ -1,0 +1,171 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import callApi from '../../utils/apiCaller'; 
+import { DataGrid, gridClasses } from '@mui/x-data-grid';
+import { 
+  Box, Paper, Stack, Button, TextField,
+  Dialog, DialogTitle, DialogContent, IconButton, Grid, Collapse, CircularProgress, Typography
+} from '@mui/material';
+
+import downloadFile from '../../utils/DownloadUtils'; 
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import HistoryIcon from '@mui/icons-material/History';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+
+export default function BalanceCompareDifferenceScreen() {
+  const [activeTab, setActiveTab] = useState('particular'); 
+  const [rows, setRows] = useState([]); 
+  const [loading, setLoading] = useState(false);
+  const [glcc, setGlcc] = useState('');
+  const [date1, setDate1] = useState(''); // Report Date / Start Date
+  const [date2, setDate2] = useState(''); // End Date for Range
+  const [systemEtlDate, setSystemEtlDate] = useState(''); 
+  const [openPopup, setOpenPopup] = useState(false);
+  const [selectedRow, setSelectedRow] = useState(null);
+
+  // 1. Fetch ETL Date ani Landing Autofill
+  useEffect(() => {
+    const fetchEtlDate = async () => {
+      try {
+        const res = await callApi('/PS/api/fincore-date', {}, "GET");
+        if (res?.data?.success) {
+          const etlDate = res.data.data.etlDate;
+          setSystemEtlDate(etlDate);
+          setDate1(etlDate); // Particular Date autofill hotey yane
+        }
+      } catch (err) { console.error("ETL API Error", err); }
+    };
+    fetchEtlDate();
+  }, []);
+
+  // 2. Main Differences API Call
+  const fetchDifferenceData = async () => {
+    // API trigger conditions
+    if (!date1 && activeTab !== 'current') return;
+
+    setLoading(true);
+    try {
+      const response = await callApi('/RS/differences', {
+          params: { page: 0, size: 10, reportDate: date1, endDate: date2, glccFilter: glcc }
+      }, "GET");
+
+      // Extracting from 'content' as per your API logs
+      const content = response?.data?.content || response?.content || [];
+
+      if (Array.isArray(content)) {
+        const mappedData = content.map((item, index) => ({
+          id: item.id || index + 1,
+          FIRST_ERROR_DATE: '', // Requirement: Empty
+          REPORT_DATE: item.reconRunDate || '', // reconRunDate display karaychi aahe
+          GLCC_VAL: `${item.branchCode || ''}${item.currency || ''}${item.cgl || ''}`,
+          CBS_BALANCE: item.cbsBalance || 0,
+          GL_BALANCE: item.glBalance || 0,
+          DIFFERENCE_AMOUNT: item.differenceAmount || 0,
+          DIFF_YESTERDAY: item.diffBwYesterday || 0,
+          type: item.type || '',
+          head: item.head || ''
+        }));
+        setRows(mappedData);
+      } else { setRows([]); }
+    } catch (err) {
+      console.error("Differences API Error", err);
+      setRows([]);
+    } finally { setLoading(false); }
+  };
+
+  // Dependancy array sathi useEffect
+  useEffect(() => {
+    fetchDifferenceData();
+  }, [date1, date2, glcc, activeTab]);
+
+  const handleTabClick = (tab) => {
+    if (activeTab === tab) {
+      setActiveTab(null);
+    } else {
+      setActiveTab(tab);
+      setGlcc('');
+      setDate2('');
+      if (tab === 'particular') setDate1(systemEtlDate); 
+      else setDate1('');
+    }
+  };
+
+  const columns = useMemo(() => [
+    { field: 'FIRST_ERROR_DATE', headerName: 'First Error Date', flex: 1 },
+    { field: 'REPORT_DATE', headerName: 'Report_DATE', flex: 1 },
+    { field: 'GLCC_VAL', headerName: 'GLCC', flex: 1.5 }, 
+    { field: 'CBS_BALANCE', headerName: 'CBS_BALANCE', flex: 1, align: 'right' },
+    { field: 'GL_BALANCE', headerName: 'GL_BALANCE', flex: 1, align: 'right' },
+    { field: 'DIFFERENCE_AMOUNT', headerName: 'DIFFERENCE_AMOUNT', flex: 1, align: 'right' },
+    { field: 'DIFF_YESTERDAY', headerName: 'DIFFerence Between YESTERDAY', flex: 1.2, align: 'right' },
+    { field: 'type', headerName: 'TYPE', flex: 1 },
+    { field: 'head', headerName: 'HEAD', flex: 1 },
+    {
+      field: 'actions', headerName: 'Details', width: 80, sortable: false,
+      renderCell: (params) => (
+        params.row?.type !== 'New Entry' && (
+          <IconButton size="small" color="primary" onClick={() => { setSelectedRow(params.row); setOpenPopup(true); }}>
+            <HistoryIcon fontSize="small" />
+          </IconButton>
+        )
+      )
+    }
+  ], []);
+
+  return (
+    <Box sx={{ p: 3, bgcolor: '#f4f7f9', minHeight: '100vh' }}>
+      <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+        {['particular', 'current', 'range'].map((tab) => (
+          <Button 
+            key={tab} variant={activeTab === tab ? "contained" : "outlined"} onClick={() => handleTabClick(tab)}
+            sx={{ flex: 1, textTransform: 'none', borderRadius: '8px', fontWeight: 600 }}
+          >
+            {tab === 'particular' ? 'Particular Date' : tab === 'current' ? 'Current Difference' : 'Search Range'}
+          </Button>
+        ))}
+      </Stack>
+
+      <Collapse in={activeTab !== null}>
+        <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
+          <Stack direction="row" spacing={2} alignItems="center">
+            {(activeTab === 'current' || activeTab === 'range') && (
+              <TextField label="GLCC Filter" size="small" value={glcc} onChange={(e) => setGlcc(e.target.value)} />
+            )}
+            <TextField 
+                type="date" label={activeTab === 'range' ? "Start Date" : "Report Date"} 
+                size="small" InputLabelProps={{ shrink: true }} value={date1} onChange={(e) => setDate1(e.target.value)} 
+            />
+            {activeTab === 'range' && (
+              <TextField 
+                type="date" label="End Date" size="small" InputLabelProps={{ shrink: true }} value={date2} onChange={(e) => setDate2(e.target.value)} 
+              />
+            )}
+            <Button startIcon={<RestartAltIcon />} onClick={() => {setGlcc(''); setDate1(systemEtlDate); setDate2('');}}>Reset</Button>
+            <Button variant="contained" startIcon={<FileDownloadIcon />} onClick={() => downloadFile(JSON.stringify(rows), 'xlsx', 'BalanceReport')}>Export</Button>
+          </Stack>
+        </Paper>
+      </Collapse>
+
+      <Paper sx={{ height: 600, width: '100%', position: 'relative' }}>
+        {loading && <CircularProgress sx={{ position: 'absolute', top: '50%', left: '50%', zIndex: 10 }} />}
+        <DataGrid 
+          rows={rows} columns={columns} 
+          getRowId={(row) => row.id}
+          sx={{ border: 0, [`& .${gridClasses.columnHeader}`]: { bgcolor: '#f8f9fa' } }}
+        />
+      </Paper>
+
+      <Dialog open={openPopup} onClose={() => setOpenPopup(false)} fullWidth maxWidth="sm">
+         <DialogTitle>Row Details</DialogTitle>
+         <DialogContent dividers>
+            {selectedRow && (
+               <Grid container spacing={2}>
+                  <Grid item xs={6}><Typography variant="body2">GLCC: {selectedRow.GLCC_VAL}</Typography></Grid>
+                  <Grid item xs={6}><Typography variant="body2">Date: {selectedRow.REPORT_DATE}</Typography></Grid>
+                  <Grid item xs={12}><Typography variant="h6" color="primary">Diff: {selectedRow.DIFFERENCE_AMOUNT}</Typography></Grid>
+               </Grid>
+            )}
+         </DialogContent>
+      </Dialog>
+    </Box>
+  );
+}
