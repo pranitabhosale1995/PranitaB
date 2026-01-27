@@ -1,0 +1,47 @@
+const fetchDifferenceData = async () => {
+    setLoading(true);
+    try {
+        const response = await callApi('/RS/differences', {
+            params: {
+                page: 0,
+                size: 100, // 100 records sathi
+                reportDate: date1,
+                glccFilter: glcc
+            }
+        }, "GET");
+
+        // --- DEBUGGING START ---
+        // Browser chya Console madhe check kara data yetoy ka
+        console.log("Raw API Response:", response); 
+        
+        if (response.data && response.data.content) {
+            console.log("Data Content Found:", response.data.content);
+            
+            const mappedRows = response.data.content.map((item, index) => {
+                // API field names strictly as per your response screenshot
+                return {
+                    id: index + 1, // DataGrid la 'id' pahijech asato
+                    REPORT_DATE: item.reconRunDate || "N/A", 
+                    CBS_BALANCE: item.cbsBalance || 0,  
+                    GL_BALANCE: item.glBalance || 0,
+                    DIFFERENCE_AMOUNT: item.differenceAmount || 0,
+                    DIFF_YESTERDAY: item.diffBwYesterday || 0,
+                    TYPE: item.type || "N/A",
+                    HEAD: item.head || "N/A",
+                    GLCC_DISPLAY: `${item.branchCode || ''}${item.currency || ''}${item.cgl || ''}`
+                };
+            });
+
+            console.table(mappedRows); // He table console madhe distoy ka?
+            setRows(mappedRows);
+        } else {
+            console.error("API response madhe 'content' array nahiye!");
+            setRows([]);
+        }
+    } catch (error) {
+        console.error("Fetch Error:", error);
+        setRows([]);
+    } finally {
+        setLoading(false);
+    }
+};
