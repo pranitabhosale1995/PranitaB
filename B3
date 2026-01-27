@@ -1,0 +1,166 @@
+import React, { useState, useMemo } from 'react';
+import { DataGrid, gridClasses } from '@mui/x-data-grid';
+import { 
+  TextField, Box, Typography, Paper, Collapse, Stack, 
+  Button, Divider, Dialog, DialogTitle, DialogContent, IconButton, alpha 
+} from '@mui/material';
+
+// Standard project download utility
+import downloadFile from '../utils/DownloadUtils'; 
+
+// Icons
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import HistoryIcon from '@mui/icons-material/History';
+import CloseIcon from '@mui/icons-material/Close';
+
+// 10 Rows of Mock Data for visibility
+const mockRows = Array.from({ length: 10 }, (_, i) => ({
+  id: i + 1, // Mandatory unique ID
+  FIRST_ERROR_DATE: '2025-11-19',
+  REPORT_DATE: '2026-01-27',
+  BRANCH_CODE: '160',
+  CURRENCY: 'INR',
+  CGL: `9495${i}`,
+  CBS_BALANCE: '94500.00',
+  GL_BALANCE: '95000.00',
+  DIFFERENCE_AMOUNT: '500.00',
+  DIFF_YESTERDAY: '100.00',
+  TYPE: i % 3 === 0 ? 'New Entry' : 'Old Entry', 
+  HEAD: 'ASSET'
+}));
+
+export default function BalanceCompareDifferenceScreen() {
+  const [activeTab, setActiveTab] = useState(null); 
+  const [rows, setRows] = useState(mockRows); 
+  const [openPopup, setOpenPopup] = useState(false);
+  const [selectedRow, setSelectedRow] = useState(null);
+
+  // Column headers exactly as requested by manager
+  const columns = useMemo(() => [
+    { field: 'FIRST_ERROR_DATE', headerName: 'First Error Date', flex: 1, minWidth: 150 },
+    { field: 'REPORT_DATE', headerName: 'Report_DATE', flex: 1, minWidth: 130 },
+    { 
+      field: 'GLCC', 
+      headerName: 'GLCC', 
+      flex: 1.5,
+      minWidth: 200,
+      // Fixed: parameters (v, row) to prevent the "undefined" crash
+      valueGetter: (v, row) => {
+        const target = row || v?.row || v;
+        return target ? `${target.BRANCH_CODE}${target.CURRENCY}${target.CGL}` : "";
+      }
+    },
+    { field: 'CBS_BALANCE', headerName: 'CBS_BALANCE', flex: 1, align: 'right' },
+    { field: 'GL_BALANCE', headerName: 'GL_BALANCE', flex: 1, align: 'right' },
+    { field: 'DIFFERENCE_AMOUNT', headerName: 'DIFFERENCE_AMOUNT', flex: 1, align: 'right' }, 
+    { field: 'DIFF_YESTERDAY', headerName: 'DIFFERence Between YESTERDAY', flex: 1.2, align: 'right' },
+    { field: 'TYPE', headerName: 'TYPE', flex: 1 },
+    { field: 'HEAD', headerName: 'HEAD', flex: 1 },
+    {
+      field: 'actions',
+      headerName: 'History',
+      flex: 1,
+      minWidth: 120,
+      sortable: false,
+      renderCell: (params) => (
+        // Requirement: Add history button except for New Entry rows
+        params.row?.TYPE !== 'New Entry' && (
+          <Button 
+            variant="text" 
+            size="small"
+            startIcon={<HistoryIcon />}
+            onClick={() => { setSelectedRow(params.row); setOpenPopup(true); }}
+            sx={{ fontWeight: 700, textTransform: 'none' }}
+          >
+            Details
+          </Button>
+        )
+      )
+    }
+  ], []);
+
+  const handleDownload = () => {
+    // Project standard Excel export
+    downloadFile(JSON.stringify(rows), 'xlsx', 'Reconciliation_Report', false);
+  };
+
+  return (
+    <Box sx={{ p: 4, bgcolor: '#f8fafc', minHeight: '100vh' }}>
+      
+      {/* Decent UI: Category Buttons */}
+      <Stack direction="row" spacing={2} sx={{ mb: 4 }}>
+        <Button 
+            variant={activeTab === 'particular' ? "contained" : "outlined"} 
+            onClick={() => setActiveTab(activeTab === 'particular' ? null : 'particular')} 
+            sx={{ flex: 1, borderRadius: '8px', fontWeight: 700, py: 1.2 }}
+        >
+          Particular Date
+        </Button>
+        <Button 
+            variant={activeTab === 'current' ? "contained" : "outlined"} 
+            color="success" 
+            onClick={() => setActiveTab(activeTab === 'current' ? null : 'current')} 
+            sx={{ flex: 1, borderRadius: '8px', fontWeight: 700, py: 1.2 }}
+        >
+          Current Difference
+        </Button>
+        <Button 
+            variant={activeTab === 'range' ? "contained" : "outlined"} 
+            color="primary" 
+            onClick={() => setActiveTab(activeTab === 'range' ? null : 'range')} 
+            sx={{ flex: 1, borderRadius: '8px', fontWeight: 700, py: 1.2 }}
+        >
+          Search Range
+        </Button>
+      </Stack>
+
+      {/* Main DataGrid Section with Pagination */}
+      <Paper elevation={0} sx={{ borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden', bgcolor: '#fff' }}>
+        <Box sx={{ height: 500, width: '100%' }}>
+          <DataGrid 
+            rows={rows} 
+            columns={columns} 
+            // Pagination implementation
+            pageSizeOptions={[5, 10, 20]}
+            initialState={{ 
+              pagination: { paginationModel: { pageSize: 10 } } 
+            }}
+            // Row ID logic to ensure visibility
+            getRowId={(row) => row.id || `${row.BRANCH_CODE}${row.CGL}`}
+            sx={{ 
+              border: 0,
+              [`& .${gridClasses.columnHeader}`]: { 
+                bgcolor: '#f8fafc', 
+                fontWeight: 800,
+                color: '#475569',
+                textTransform: 'uppercase',
+                fontSize: '0.75rem'
+              },
+              [`& .${gridClasses.cell}`]: { borderBottom: '1px solid #f1f5f9' },
+              [`& .${gridClasses.row}:hover`]: { bgcolor: alpha('#f8fafc', 0.5) }
+            }}
+          />
+        </Box>
+      </Paper>
+
+      {/* Audit History Popup */}
+      <Dialog open={openPopup} onClose={() => setOpenPopup(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '12px' } }}>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2 }}>
+          <Typography variant="h6" sx={{ fontWeight: 800 }}>Audit History</Typography>
+          <IconButton onClick={() => setOpenPopup(false)}><CloseIcon /></IconButton>
+        </DialogTitle>
+        <DialogContent dividers>
+          {selectedRow ? (
+            <Stack spacing={1}>
+              <Typography variant="subtitle2"><strong>GLCC Entity:</strong> {`${selectedRow.BRANCH_CODE}${selectedRow.CURRENCY}${selectedRow.CGL}`}</Typography>
+              <Typography variant="body2" color="textSecondary">No previous audit discrepancies recorded for this specific date range.</Typography>
+            </Stack>
+          ) : (
+            <Typography>No history available.</Typography>
+          )}
+        </DialogContent>
+      </Dialog>
+    </Box>
+  );
+}
