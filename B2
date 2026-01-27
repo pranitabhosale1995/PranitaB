@@ -1,0 +1,120 @@
+import React, { useState, useMemo } from 'react';
+import { DataGrid, gridClasses } from '@mui/x-data-grid';
+import { 
+  TextField, Box, Typography, Paper, Collapse, Stack, 
+  Button, Divider, Dialog, DialogTitle, DialogContent, IconButton 
+} from '@mui/material';
+
+// Utility for Excel download
+import downloadFile from '../utils/DownloadUtils'; 
+
+// Icons
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import HistoryIcon from '@mui/icons-material/History';
+import CloseIcon from '@mui/icons-material/Close';
+
+// Mock Data for Testing (10 Rows)
+const mockRows = Array.from({ length: 10 }, (_, i) => ({
+  id: i + 1, // Unique ID is mandatory for DataGrid
+  FIRST_ERROR_DATE: '2025-11-19',
+  REPORT_DATE: '2026-01-27',
+  BRANCH_CODE: '160',
+  CURRENCY: 'INR',
+  CGL: `9495${i}`,
+  CBS_BALANCE: '94500.00',
+  GL_BALANCE: '95000.00',
+  DIFFERENCE_AMOUNT: '500.00',
+  DIFF_YESTERDAY: '100.00',
+  TYPE: i === 0 ? 'New Entry' : 'Old Entry', // First row is New Entry
+  HEAD: 'ASSET'
+}));
+
+export default function BalanceCompareDifferenceScreen() {
+  const [activeTab, setActiveTab] = useState(null); 
+  const [rows, setRows] = useState(mockRows); // Initializing with mock data to ensure visibility
+  const [openPopup, setOpenPopup] = useState(false);
+  const [selectedRow, setSelectedRow] = useState(null);
+
+  const columns = useMemo(() => [
+    { field: 'FIRST_ERROR_DATE', headerName: 'First Error Date', flex: 1, minWidth: 150 },
+    { field: 'REPORT_DATE', headerName: 'Report_DATE', flex: 1, minWidth: 130 },
+    { 
+      field: 'GLCC', 
+      headerName: 'GLCC', 
+      flex: 1.5,
+      minWidth: 200,
+      // Fixed parameters (v, row) to stop the undefined crash
+      valueGetter: (v, row) => {
+        const target = row || v?.row || v;
+        return target ? `${target.BRANCH_CODE}${target.CURRENCY}${target.CGL}` : "";
+      }
+    },
+    { field: 'CBS_BALANCE', headerName: 'CBS_BALANCE', flex: 1, align: 'right' },
+    { field: 'GL_BALANCE', headerName: 'GL_BALANCE', flex: 1, align: 'right' },
+    { field: 'DIFFERENCE_AMOUNT', headerName: 'DIFFERENCE_AMOUNT', flex: 1, align: 'right' }, 
+    { field: 'DIFF_YESTERDAY', headerName: 'DIFFERence Between YESTERDAY', flex: 1.2, align: 'right' },
+    { field: 'TYPE', headerName: 'TYPE', flex: 1 },
+    { field: 'HEAD', headerName: 'HEAD', flex: 1 },
+    {
+      field: 'actions',
+      headerName: 'History',
+      flex: 1,
+      minWidth: 120,
+      renderCell: (params) => (
+        // Requirement: Hide history button for New Entry rows
+        params.row?.TYPE !== 'New Entry' && (
+          <Button 
+            variant="text" 
+            startIcon={<HistoryIcon />}
+            onClick={() => { setSelectedRow(params.row); setOpenPopup(true); }}
+            sx={{ fontWeight: 800 }}
+          >
+            Details
+          </Button>
+        )
+      )
+    }
+  ], []);
+
+  const handleDownload = () => {
+    // Standard project Excel export
+    downloadFile(JSON.stringify(rows), 'xlsx', 'Reconciliation_Report', false);
+  };
+
+  return (
+    <Box sx={{ p: 4, bgcolor: '#f8fafc', minHeight: '100vh' }}>
+      <Stack direction="row" spacing={2} sx={{ mb: 4 }}>
+        <Button variant={activeTab === 'particular' ? "contained" : "outlined"} onClick={() => setActiveTab('particular')} sx={{ flex: 1 }}>Particular Date</Button>
+        <Button variant={activeTab === 'current' ? "contained" : "outlined"} color="success" onClick={() => setActiveTab('current')} sx={{ flex: 1 }}>Current Difference</Button>
+        <Button variant={activeTab === 'range' ? "contained" : "outlined"} color="primary" onClick={() => setActiveTab('range')} sx={{ flex: 1 }}>Search Range</Button>
+      </Stack>
+
+      <Paper elevation={0} sx={{ borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+        <Box sx={{ height: 500, width: '100%' }}>
+          <DataGrid 
+            rows={rows} 
+            columns={columns} 
+            // Ensures row rendering even if API 'id' is missing
+            getRowId={(row) => row.id || `${row.BRANCH_CODE}${row.CGL}`}
+            sx={{ border: 0, [`& .${gridClasses.columnHeader}`]: { bgcolor: '#f8fafc', fontWeight: 800 } }}
+          />
+        </Box>
+      </Paper>
+
+      <Dialog open={openPopup} onClose={() => setOpenPopup(false)} fullWidth>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between' }}>
+          History Details
+          <IconButton onClick={() => setOpenPopup(false)}><CloseIcon /></IconButton>
+        </DialogTitle>
+        <DialogContent dividers>
+          {selectedRow ? (
+             <Typography>Audit details for {selectedRow.BRANCH_CODE}{selectedRow.CURRENCY}{selectedRow.CGL}</Typography>
+          ) : (
+            <Typography>No history found.</Typography>
+          )}
+        </DialogContent>
+      </Dialog>
+    </Box>
+  );
+}
