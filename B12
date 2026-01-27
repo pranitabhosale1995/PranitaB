@@ -1,0 +1,36 @@
+// Updated Automatic Search Logic
+useEffect(() => {
+    let filtered = [...mockRows];
+
+    // 1. Particular Date: Uses date1 (etlDate) as the filter
+    if (activeTab === 'particular') {
+        if (date1) {
+            filtered = filtered.filter(r => r.REPORT_DATE === date1);
+        }
+    } 
+    
+    // 2. Search Range: Ignore etlDate unless BOTH start (date1) and end (date2) are provided
+    else if (activeTab === 'range') {
+        if (date1 && date2) {
+            filtered = filtered.filter(r => r.REPORT_DATE >= date1 && r.REPORT_DATE <= date2);
+        } else {
+            // If range is selected but incomplete, show all or show empty
+            filtered = [...mockRows]; 
+        }
+    } 
+    
+    // 3. Current Difference: Completely ignore date1 (etlDate) even if it has a value
+    else if (activeTab === 'current') {
+        if (glcc) {
+            const search = glcc.toLowerCase();
+            filtered = filtered.filter(r => 
+                `${r.BRANCH_CODE}${r.CURRENCY}${r.CGL}`.toLowerCase().includes(search)
+            );
+        } else {
+            // Show all records for "Current" without date filtering
+            filtered = [...mockRows]; 
+        }
+    }
+
+    setRows(filtered);
+}, [glcc, date1, date2, activeTab]);
