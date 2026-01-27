@@ -1,0 +1,163 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import callApi from '../../utils/apiCaller'; 
+import { DataGrid, gridClasses } from '@mui/x-data-grid';
+import { 
+  Box, Typography, Paper, Stack, Button, Divider, TextField,
+  Dialog, DialogTitle, DialogContent, IconButton, alpha, Grid, Collapse, CircularProgress
+} from '@mui/material';
+
+import downloadFile from '../../utils/DownloadUtils'; 
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import HistoryIcon from '@mui/icons-material/History';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+
+export default function BalanceCompareDifferenceScreen() {
+  const [activeTab, setActiveTab] = useState(null); 
+  const [rows, setRows] = useState([]); 
+  const [loading, setLoading] = useState(false);
+  const [glcc, setGlcc] = useState('');
+  const [date1, setDate1] = useState(''); 
+  const [systemEtlDate, setSystemEtlDate] = useState(''); 
+  const [openPopup, setOpenPopup] = useState(false);
+  const [selectedRow, setSelectedRow] = useState(null);
+
+  // 1. Fetch System Date on mount
+  useEffect(() => {
+    const fetchEtlDate = async () => {
+      try {
+        const response = await callApi('/PS/api/fincore-date', {}, "GET");
+        if (response?.data?.success) {
+          setSystemEtlDate(response.data.data.etlDate);
+        }
+      } catch (error) {
+        console.error("ETL Date fetch error:", error);
+      }
+    };
+    fetchEtlDate();
+  }, []);
+
+  // 2. Main Fetch Function
+  const fetchDifferenceData = async () => {
+    setLoading(true);
+    try {
+      const response = await callApi('/RS/differences', {
+          params: {
+            page: 0,
+            size: 10, // Set pagination to 10
+            reportDate: date1,
+            glccFilter: glcc
+          }
+      }, "GET"); 
+
+      console.log("Full API Response:", response);
+
+      // Check if data is in response.data.content OR just response.content
+      const contentArray = response?.data?.content || response?.content;
+
+      if (contentArray && Array.isArray(contentArray)) {
+        const mappedRows = contentArray.map((item, index) => ({
+          ...item,
+          id: item.id || index + 1, // Ensure unique ID for DataGrid
+          REPORT_DATE: item.reconRunDate || 'N/A',
+          CBS_BALANCE: item.cbsBalance || 0,
+          GL_BALANCE: item.glBalance || 0,
+          DIFFERENCE_AMOUNT: item.differenceAmount || 0,
+          DIFF_YESTERDAY: item.diffBwYesterday || 0,
+          TYPE: item.type || 'N/A',
+          HEAD: item.head || 'N/A',
+          GLCC_DISPLAY: `${item.branchCode || ''}${item.currency || ''}${item.cgl || ''}`
+        }));
+        setRows(mappedRows);
+      } else {
+        console.error("Content array not found in expected format");
+        setRows([]);
+      }
+    } catch (error) {
+      console.error("API Fetch Error:", error);
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 3. Auto-load on landing
+  useEffect(() => {
+    fetchDifferenceData();
+  }, [date1, glcc, activeTab]);
+
+  const handleTabClick = (tab) => {
+    if (activeTab === tab) {
+      setActiveTab(null);
+      setRows([]);
+    } else {
+      setActiveTab(tab);
+      setGlcc('');
+      if (tab === 'particular') setDate1(systemEtlDate);
+      else setDate1('');
+    }
+  };
+
+  const columns = useMemo(() => [
+    { field: 'REPORT_DATE', headerName: 'Report Date', flex: 1 },
+    { field: 'GLCC_DISPLAY', headerName: 'GLCC', flex: 1.5 },
+    { field: 'CBS_BALANCE', headerName: 'CBS Balance', flex: 1, align: 'right' },
+    { field: 'GL_BALANCE', headerName: 'GL Balance', flex: 1, align: 'right' },
+    { field: 'DIFFERENCE_AMOUNT', headerName: 'Difference', flex: 1, align: 'right' },
+    { field: 'TYPE', headerName: 'Type', flex: 1 },
+    {
+      field: 'actions', headerName: 'Details', flex: 0.5,
+      renderCell: (params) => (
+        <IconButton size="small" color="primary" onClick={() => { setSelectedRow(params.row); setOpenPopup(true); }}>
+          <HistoryIcon fontSize="small" />
+        </IconButton>
+      )
+    }
+  ], []);
+
+  return (
+    <Box sx={{ p: 3, bgcolor: '#f4f7f9', minHeight: '100vh' }}>
+      <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+        {['particular', 'current', 'range'].map((tab) => (
+          <Button key={tab} variant={activeTab === tab ? "contained" : "outlined"} onClick={() => handleTabClick(tab)} sx={{ flex: 1, fontWeight: 700 }}>
+            {tab.toUpperCase()}
+          </Button>
+        ))}
+      </Stack>
+
+      <Collapse in={activeTab !== null}>
+        <Paper sx={{ p: 3, mb: 3 }}>
+          <Stack direction="row" spacing={3} alignItems="center">
+            <TextField label="GLCC" size="small" value={glcc} onChange={(e) => setGlcc(e.target.value)} />
+            <TextField type="date" label="Date" size="small" InputLabelProps={{ shrink: true }} value={date1} onChange={(e) => setDate1(e.target.value)} />
+            <Button variant="outlined" color="error" startIcon={<RestartAltIcon />} onClick={() => {setGlcc(''); setDate1('');}}>Reset</Button>
+            <Button variant="contained" onClick={() => downloadFile(JSON.stringify(rows), 'xlsx', 'Report')}>Export</Button>
+          </Stack>
+        </Paper>
+      </Collapse>
+
+      <Paper sx={{ height: 500, width: '100%', position: 'relative' }}>
+        {loading && <CircularProgress sx={{ position: 'absolute', top: '45%', left: '48%' }} />}
+        <DataGrid 
+          rows={rows} 
+          columns={columns} 
+          initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+          pageSizeOptions={[10, 20, 50]}
+          getRowId={(row) => row.id}
+          sx={{ border: 0, [`& .${gridClasses.columnHeader}`]: { bgcolor: '#f8f9fa' } }}
+        />
+      </Paper>
+
+      <Dialog open={openPopup} onClose={() => setOpenPopup(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Row Details</DialogTitle>
+        <DialogContent dividers>
+          {selectedRow && (
+            <Box>
+              <Typography><strong>GLCC:</strong> {selectedRow.GLCC_DISPLAY}</Typography>
+              <Typography><strong>Diff:</strong> {selectedRow.DIFFERENCE_AMOUNT}</Typography>
+            </Box>
+          )}
+        </DialogContent>
+      </Dialog>
+    </Box>
+  );
+}
