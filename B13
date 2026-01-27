@@ -1,0 +1,36 @@
+// Strict Tab-Based Filtering Logic
+useEffect(() => {
+    let filtered = [...mockRows];
+
+    // 1. Particular Date: ONLY use date1 here
+    if (activeTab === 'particular') {
+        if (date1) {
+            filtered = filtered.filter(r => r.REPORT_DATE === date1);
+        }
+    } 
+    
+    // 2. Current Difference: IGNORE date1 completely
+    else if (activeTab === 'current') {
+        if (glcc) {
+            const search = glcc.toLowerCase();
+            filtered = filtered.filter(r => 
+                `${r.BRANCH_CODE}${r.CURRENCY}${r.CGL}`.toLowerCase().includes(search)
+            );
+        } else {
+            // Show all data for current without date filtering
+            filtered = [...mockRows]; 
+        }
+    } 
+    
+    // 3. Search Range: IGNORE date1 unless date2 is also provided
+    else if (activeTab === 'range') {
+        if (date1 && date2) {
+            filtered = filtered.filter(r => r.REPORT_DATE >= date1 && r.REPORT_DATE <= date2);
+        } else {
+            // Do not apply partial date1 filter in range mode
+            filtered = [...mockRows]; 
+        }
+    }
+
+    setRows(filtered);
+}, [glcc, date1, date2, activeTab]);
