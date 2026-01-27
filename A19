@@ -1,0 +1,144 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { DataGrid, GridToolbarContainer, gridClasses } from '@mui/x-data-grid';
+import { TextField, Box, Typography, Paper, Alert, Collapse, Stack, Button, Divider } from '@mui/material';
+import * as XLSX from 'xlsx'; // Excel sathi he library vapra (npm install xlsx)
+
+// Icons
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import DateRangeIcon from '@mui/icons-material/DateRange';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import HistoryIcon from '@mui/icons-material/History';
+
+// --- Mixed Dummy Data (As per Manager's Columns) ---
+const generateData = () => {
+  const data = [];
+  for (let i = 1; i <= 50; i++) {
+    data.push({
+      id: i,
+      FIRST_ERROR_DATE: `2025-12-01`,
+      REPORT_DATE: `2026-01-20`,
+      BRANCH_CODE: `B10${i}`,
+      CURRENCY: 'INR',
+      CGL: `9900${i}`,
+      CBS_BALANCE: (Math.random() * 1000000).toFixed(2),
+      GL_BALANCE: (Math.random() * 1000000).toFixed(2),
+      DIFFERENCE_AMOUNT: (Math.random() * 5000).toFixed(2),
+      DIFF_YESTERDAY: (Math.random() * 1000).toFixed(2),
+      TYPE: 'Old Entry',
+      HEAD: 'ASSET'
+    });
+  }
+  return data;
+};
+
+const dummyData = generateData();
+
+function CustomToolbar() {
+  return (
+    <GridToolbarContainer sx={{ p: 2, bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+      <Typography variant="subtitle2" sx={{ flexGrow: 1, fontWeight: 700, color: '#475569' }}>
+          RECONCILIATION LOGS
+      </Typography>
+    </GridToolbarContainer>
+  );
+}
+
+export default function FincoreDashboard() {
+  const [activeTab, setActiveTab] = useState(null); 
+  const [rows, setRows] = useState(dummyData);
+  const [glcc, setGlcc] = useState('');
+  const [date1, setDate1] = useState('');
+  const [date2, setDate2] = useState('');
+  const [error, setError] = useState('');
+
+  const handleTabClick = (tabName) => {
+    if (activeTab === tabName) { setActiveTab(null); resetFilters(); } 
+    else { setActiveTab(tabName); setError(''); }
+  };
+
+  const resetFilters = () => {
+    setGlcc(''); setDate1(''); setDate2('');
+    setRows(dummyData); setError('');
+  };
+
+  // Logic: Excel Download
+  const handleExcelDownload = () => {
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Reconciliation");
+    XLSX.writeFile(workbook, "Recon_Report.xlsx");
+  };
+
+  const columns = useMemo(() => [
+    { field: 'FIRST_ERROR_DATE', headerName: 'First Error Date', flex: 1, minWidth: 150 },
+    { field: 'REPORT_DATE', headerName: 'Report Date', flex: 1, minWidth: 130 },
+    { 
+      field: 'GLCC', headerName: 'GLCC', flex: 1.5, minWidth: 220,
+      valueGetter: (v, row) => {
+        const target = row || v?.row;
+        return target ? `${target.BRANCH_CODE}${target.CURRENCY}${target.CGL}` : "";
+      }
+    },
+    { field: 'CBS_BALANCE', headerName: 'CBS Balance', flex: 1, minWidth: 140, align: 'right' },
+    { field: 'GL_BALANCE', headerName: 'GL Balance', flex: 1, minWidth: 140, align: 'right' },
+    { field: 'DIFFERENCE_AMOUNT', headerName: 'Difference', flex: 1, minWidth: 140, align: 'right' }, // No colors here
+    { field: 'DIFF_YESTERDAY', headerName: 'Difference Between Yesterday', flex: 1, minWidth: 200, align: 'right' },
+    { field: 'TYPE', headerName: 'Type', flex: 1, minWidth: 150 },
+    { field: 'HEAD', headerName: 'Head', flex: 1, minWidth: 120 },
+  ], []);
+
+  return (
+    <Box sx={{ p: 4, bgcolor: '#f8fafc', minHeight: '100vh' }}>
+      
+      {/* Search Selection Section */}
+      <Stack direction="row" spacing={3} sx={{ mb: 4 }}>
+        <Button variant={activeTab === 'particular' ? "contained" : "outlined"} onClick={() => handleTabClick('particular')} startIcon={<EventAvailableIcon />} sx={{ flex: 1, py: 1.5, borderRadius: 2, fontWeight: 700 }}>
+          Particular Date
+        </Button>
+        <Button variant={activeTab === 'current' ? "contained" : "outlined"} color="success" onClick={() => handleTabClick('current')} startIcon={<HistoryIcon />} sx={{ flex: 1, py: 1.5, borderRadius: 2, fontWeight: 700 }}>
+          Current Difference
+        </Button>
+        <Button variant={activeTab === 'range' ? "contained" : "outlined"} color="primary" onClick={() => handleTabClick('range')} startIcon={<DateRangeIcon />} sx={{ flex: 1, py: 1.5, borderRadius: 2, fontWeight: 700 }}>
+          Search Range
+        </Button>
+      </Stack>
+
+      {/* Search Input Panel */}
+      <Collapse in={activeTab !== null}>
+        <Paper elevation={0} sx={{ p: 3, mb: 4, borderRadius: 2, border: '1px solid #e2e8f0', bgcolor: '#fff' }}>
+          <Stack direction="row" spacing={3} alignItems="center">
+            {(activeTab === 'current' || activeTab === 'range') && (
+              <TextField label="GLCC Filter" size="small" sx={{ width: 250 }} value={glcc} onChange={(e) => setGlcc(e.target.value)} />
+            )}
+            <TextField type="date" label="Select Date" size="small" InputLabelProps={{ shrink: true }} value={date1} onChange={(e) => setDate1(e.target.value)} sx={{ width: 180 }} />
+            {activeTab === 'range' && (
+              <TextField type="date" label="End Date" size="small" InputLabelProps={{ shrink: true }} value={date2} onChange={(e) => setDate2(e.target.value)} sx={{ width: 180 }} />
+            )}
+            <Divider orientation="vertical" flexItem />
+            <Button variant="outlined" color="error" startIcon={<RestartAltIcon />} onClick={resetFilters}>Reset</Button>
+            
+            {/* Professional Excel Download Button */}
+            <Button variant="contained" color="success" startIcon={<FileDownloadIcon />} onClick={handleExcelDownload}>
+                Excel Download
+            </Button>
+          </Stack>
+        </Paper>
+      </Collapse>
+
+      {/* Professional DataGrid (Error-Free) */}
+      <Paper elevation={0} sx={{ width: '100%', borderRadius: 2, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+        <Box sx={{ height: 600, width: '100%' }}>
+          <DataGrid 
+            rows={rows} 
+            columns={columns} 
+            slots={{ toolbar: CustomToolbar }}
+            pageSizeOptions={[10, 20]}
+            initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+            sx={{ border: 0, [`& .${gridClasses.columnHeader}`]: { bgcolor: '#f1f5f9', fontWeight: 800 } }}
+          />
+        </Box>
+      </Paper>
+    </Box>
+  );
+}
