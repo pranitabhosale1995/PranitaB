@@ -1,0 +1,258 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import axios from 'axios'; 
+import { DataGrid, gridClasses } from '@mui/x-data-grid';
+import { 
+  Box, Typography, Paper, Stack, Button, Divider, TextField,
+  Dialog, DialogTitle, DialogContent, IconButton, alpha, Grid, Collapse
+} from '@mui/material';
+
+// Standard project utility for file downloads
+import downloadFile from '../utils/DownloadUtils'; 
+
+// Icons
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import HistoryIcon from '@mui/icons-material/History';
+import CloseIcon from '@mui/icons-material/Close';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+
+export default function BalanceCompareDifferenceScreen() {
+  const [activeTab, setActiveTab] = useState(null); 
+  const [rows, setRows] = useState([]); // Array to store API results
+  const [glcc, setGlcc] = useState('');
+  const [date1, setDate1] = useState('');
+  const [date2, setDate2] = useState('');
+  const [openPopup, setOpenPopup] = useState(false);
+  const [selectedRow, setSelectedRow] = useState(null);
+
+  /**
+   * Main function to fetch grid data based on active filters
+   * Includes console logs to track why data might not be appearing
+   */
+  const fetchGridData = async () => {
+    console.log(">>> Fetching Data for Tab:", activeTab);
+    console.log(">>> Current Filters:", { date1, date2, glcc });
+
+    try {
+      // Replace with your actual data endpoint
+      const response = await axios.get('http://10.0.19.123:3000/api/fincore-data', {
+        params: { activeTab, date1, date2, glcc }
+      });
+
+      console.log(">>> API Raw Response:", response.data);
+
+      if (response.data && response.data.success) {
+        // DataGrid requires a unique 'id' for each row
+        // If your API doesn't provide one, we map the index as a fallback
+        const dataWithIds = response.data.data.map((item, index) => ({
+          ...item,
+          id: item.id || index + 1 
+        }));
+        
+        console.log(">>> Processed Rows for Grid:", dataWithIds);
+        setRows(dataWithIds);
+      } else {
+        console.warn(">>> API call successful but success flag is false or data is empty");
+        setRows([]); // Clear grid if no data found
+      }
+    } catch (error) {
+      console.error(">>> AXIOS ERROR:", error);
+      if (error.response) {
+        console.error(">>> Server Error Status:", error.response.status);
+        console.error(">>> Server Error Data:", error.response.data);
+      }
+    }
+  };
+
+  /**
+   * Fetches the initial system date (etlDate) on component mount
+   */
+  useEffect(() => {
+    const fetchEtlDate = async () => {
+      try {
+        const response = await axios.get('http://10.0.19.123:3000/api/fincore-date');
+        console.log(">>> ETL Date Response:", response.data);
+        if (response.data.success) {
+          setDate1(response.data.data.etlDate); // Set the default report date
+        }
+      } catch (error) {
+        console.error(">>> ETL Date Fetch Error:", error);
+      }
+    };
+    fetchEtlDate();
+  }, []);
+
+  /**
+   * Automatic Search Trigger: Fires whenever a filter or tab changes
+   */
+  useEffect(() => {
+    if (activeTab) {
+      fetchGridData();
+    }
+  }, [glcc, date1, date2, activeTab]);
+
+  const handleTabClick = (tab) => {
+    if (activeTab === tab) {
+      setActiveTab(null);
+      setRows([]); // Reset rows on close
+    } else {
+      setActiveTab(tab);
+    }
+  };
+
+  /**
+   * DataGrid Column Configuration
+   * Updated valueGetter to fix 'undefined (reading row)' error
+   */
+  const columns = useMemo(() => [
+    { field: 'FIRST_ERROR_DATE', headerName: 'First Error Date', flex: 1, minWidth: 150 },
+    { field: 'REPORT_DATE', headerName: 'Report_DATE', flex: 1, minWidth: 130 },
+    { 
+      field: 'GLCC', 
+      headerName: 'GLCC', 
+      flex: 1.5,
+      minWidth: 180,
+      // Fixed parameters (v, row) to handle different MUI versions
+      valueGetter: (v, row) => {
+        const target = row || v?.row || v;
+        return target ? `${target.BRANCH_CODE}${target.CURRENCY}${target.CGL}` : "";
+      }
+    },
+    { field: 'CBS_BALANCE', headerName: 'CBS_BALANCE', flex: 1, align: 'right' },
+    { field: 'GL_BALANCE', headerName: 'GL_BALANCE', flex: 1, align: 'right' },
+    { field: 'DIFFERENCE_AMOUNT', headerName: 'DIFFERENCE_AMOUNT', flex: 1, align: 'right' }, 
+    { field: 'DIFF_YESTERDAY', headerName: 'DIFFERence Between YESTERDAY', flex: 1.2, align: 'right' },
+    { field: 'TYPE', headerName: 'TYPE', flex: 1 },
+    { field: 'HEAD', headerName: 'HEAD', flex: 1 },
+    {
+      field: 'actions', 
+      headerName: 'Details', 
+      flex: 0.8, 
+      sortable: false,
+      renderCell: (params) => (
+        // Requirement: Only show for rows that are not 'New Entry'
+        params.row?.TYPE !== 'New Entry' && (
+          <IconButton size="small" color="primary" onClick={() => { setSelectedRow(params.row); setOpenPopup(true); }}>
+            <HistoryIcon fontSize="small" />
+          </IconButton>
+        )
+      )
+    }
+  ], []);
+
+  const handleDownload = () => {
+    // Utility for Excel export
+    downloadFile(JSON.stringify(rows), 'xlsx', 'Reconciliation_Report', false);
+  };
+
+  return (
+    <Box sx={{ p: 3, bgcolor: '#f4f7f9', minHeight: '100vh' }}>
+      {/* Tab Selectors */}
+      <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+        {['particular', 'current', 'range'].map((tab) => (
+          <Button 
+            key={tab} 
+            variant={activeTab === tab ? "contained" : "outlined"} 
+            onClick={() => handleTabClick(tab)}
+            sx={{ flex: 1, textTransform: 'none', borderRadius: '12px', fontWeight: 700, py: 1.5 }}
+          >
+            {tab === 'particular' ? 'Particular Date' : tab === 'current' ? 'Current Difference' : 'Search Range'}
+          </Button>
+        ))}
+      </Stack>
+
+      {/* Conditional Filter Panel */}
+      <Collapse in={activeTab !== null}>
+        <Paper elevation={0} sx={{ p: 3, mb: 3, borderRadius: '12px', border: '1px solid #e0e4e8', bgcolor: '#fff' }}>
+          <Stack direction="row" spacing={3} alignItems="center">
+            {(activeTab === 'current' || activeTab === 'range') && (
+              <TextField 
+                label="GLCC Filter" 
+                size="small" 
+                value={glcc} 
+                onChange={(e) => setGlcc(e.target.value)} 
+              />
+            )}
+            <TextField 
+              type="date" 
+              label="Report Date" 
+              size="small" 
+              InputLabelProps={{ shrink: true }} 
+              value={date1} 
+              onChange={(e) => setDate1(e.target.value)} 
+            />
+            {activeTab === 'range' && (
+              <TextField 
+                type="date" 
+                label="End Date" 
+                size="small" 
+                InputLabelProps={{ shrink: true }} 
+                value={date2} 
+                onChange={(e) => setDate2(e.target.value)} 
+              />
+            )}
+            <Divider orientation="vertical" flexItem />
+            <Button 
+              variant="outlined" 
+              color="error" 
+              startIcon={<RestartAltIcon />} 
+              onClick={() => { setGlcc(''); setDate1(''); setDate2(''); }}
+            >
+              Reset
+            </Button>
+            <Button 
+              variant="contained" 
+              startIcon={<FileDownloadIcon />} 
+              onClick={handleDownload} 
+              sx={{ bgcolor: '#1e293b' }}
+            >
+              Export Excel
+            </Button>
+          </Stack>
+        </Paper>
+      </Collapse>
+
+      {/* Main DataGrid Section with built-in Pagination */}
+      <Paper elevation={0} sx={{ borderRadius: '12px', border: '1px solid #e0e4e8', overflow: 'hidden' }}>
+        <Box sx={{ height: 600, width: '100%' }}>
+          <DataGrid 
+            rows={rows} 
+            columns={columns} 
+            pageSizeOptions={[10, 25, 50]}
+            initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+            getRowId={(row) => row.id} // Essential for grid visibility
+            sx={{ 
+              border: 0, 
+              [`& .${gridClasses.columnHeader}`]: { bgcolor: '#f8f9fa', fontWeight: 700 } 
+            }}
+          />
+        </Box>
+      </Paper>
+
+      {/* Difference Details Popup */}
+      <Dialog open={openPopup} onClose={() => setOpenPopup(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '12px' } }}>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h6" sx={{ fontWeight: 800 }}>Details of Difference</Typography>
+          <IconButton size="small" onClick={() => setOpenPopup(false)}><CloseIcon fontSize="small" /></IconButton>
+        </DialogTitle>
+        <DialogContent dividers sx={{ py: 3 }}>
+          {selectedRow && (
+            <Grid container spacing={3}>
+              <Grid item xs={6}>
+                <Typography variant="caption" color="textSecondary" sx={{ fontWeight: 700 }}>GLCC CODE</Typography>
+                <Typography variant="body1" sx={{ fontWeight: 600 }}>{selectedRow.BRANCH_CODE}{selectedRow.CURRENCY}{selectedRow.CGL}</Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="caption" color="textSecondary" sx={{ fontWeight: 700 }}>REPORT DATE</Typography>
+                <Typography variant="body1">{selectedRow.REPORT_DATE}</Typography>
+              </Grid>
+              <Grid item xs={12} sx={{ p: 2, bgcolor: alpha('#ef4444', 0.05), borderRadius: '8px' }}>
+                <Typography variant="caption" color="error" sx={{ fontWeight: 800 }}>TOTAL DIFFERENCE AMOUNT</Typography>
+                <Typography variant="h4" color="error" sx={{ fontWeight: 900 }}>{selectedRow.DIFFERENCE_AMOUNT}</Typography>
+              </Grid>
+            </Grid>
+          )}
+        </DialogContent>
+      </Dialog>
+    </Box>
+  );
+}
