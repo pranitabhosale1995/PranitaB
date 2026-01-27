@@ -1,0 +1,168 @@
+import React, { useState, useMemo } from 'react';
+import { DataGrid, gridClasses } from '@mui/x-data-grid';
+import { 
+  Box, Typography, Paper, Stack, Button, 
+  Dialog, DialogTitle, DialogContent, IconButton, alpha 
+} from '@mui/material';
+
+// Standard project download utility
+import downloadFile from '../utils/DownloadUtils'; 
+
+// Icons
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import HistoryIcon from '@mui/icons-material/History';
+import CloseIcon from '@mui/icons-material/Close';
+
+// Mock Data for a clean visual
+const mockRows = Array.from({ length: 15 }, (_, i) => ({
+  id: i + 1, // Mandatory unique ID for DataGrid
+  FIRST_ERROR_DATE: '2025-11-19',
+  REPORT_DATE: '2026-01-27',
+  BRANCH_CODE: '160',
+  CURRENCY: 'INR',
+  CGL: `9495${i}`,
+  CBS_BALANCE: '94500.00',
+  GL_BALANCE: '95000.00',
+  DIFFERENCE_AMOUNT: '500.00',
+  DIFF_YESTERDAY: '100.00',
+  TYPE: i % 3 === 0 ? 'New Entry' : 'Old Entry', 
+  HEAD: 'ASSET'
+}));
+
+export default function BalanceCompareDifferenceScreen() {
+  const [activeTab, setActiveTab] = useState('particular'); 
+  const [rows] = useState(mockRows); 
+  const [openPopup, setOpenPopup] = useState(false);
+  const [selectedRow, setSelectedRow] = useState(null);
+
+  // Column names strictly following manager's instructions
+  const columns = useMemo(() => [
+    { field: 'FIRST_ERROR_DATE', headerName: 'First Error Date', flex: 1, minWidth: 150 },
+    { field: 'REPORT_DATE', headerName: 'Report_DATE', flex: 1, minWidth: 130 },
+    { 
+      field: 'GLCC', 
+      headerName: 'GLCC', 
+      flex: 1.5,
+      minWidth: 180,
+      // FIXED: parameters (v, row) to prevent the "undefined" crash
+      valueGetter: (v, row) => {
+        const target = row || v?.row || v;
+        return target ? `${target.BRANCH_CODE}${target.CURRENCY}${target.CGL}` : "";
+      }
+    },
+    { field: 'CBS_BALANCE', headerName: 'CBS_BALANCE', flex: 1, align: 'right' },
+    { field: 'GL_BALANCE', headerName: 'GL_BALANCE', flex: 1, align: 'right' },
+    { field: 'DIFFERENCE_AMOUNT', headerName: 'DIFFERENCE_AMOUNT', flex: 1, align: 'right' }, 
+    { field: 'DIFF_YESTERDAY', headerName: 'DIFFERence Between YESTERDAY', flex: 1.2, align: 'right' },
+    { field: 'TYPE', headerName: 'TYPE', flex: 1 },
+    { field: 'HEAD', headerName: 'HEAD', flex: 1 },
+    {
+      field: 'actions',
+      headerName: 'History',
+      flex: 1,
+      minWidth: 100,
+      sortable: false,
+      renderCell: (params) => (
+        // Requirement: Add history button except for New Entry rows
+        params.row?.TYPE !== 'New Entry' && (
+          <IconButton 
+            size="small"
+            color="primary"
+            onClick={() => { setSelectedRow(params.row); setOpenPopup(true); }}
+          >
+            <HistoryIcon fontSize="small" />
+          </IconButton>
+        )
+      )
+    }
+  ], []);
+
+  const handleDownload = () => {
+    // Project standard Excel export
+    downloadFile(JSON.stringify(rows), 'xlsx', 'Reconciliation_Report', false);
+  };
+
+  return (
+    <Box sx={{ p: 3, bgcolor: '#f4f7f9', minHeight: '100vh' }}>
+      
+      {/* Category Navigation */}
+      <Stack direction="row" spacing={1} sx={{ mb: 3 }}>
+        {['particular', 'current', 'range'].map((tab) => (
+          <Button 
+            key={tab}
+            variant={activeTab === tab ? "contained" : "text"} 
+            onClick={() => setActiveTab(tab)}
+            sx={{ 
+                textTransform: 'capitalize', 
+                borderRadius: '20px', 
+                px: 3,
+                fontWeight: 600,
+                bgcolor: activeTab === tab ? '#1976d2' : 'transparent',
+                color: activeTab === tab ? '#fff' : '#5f6368'
+            }}
+          >
+            {tab === 'particular' ? 'Particular Date' : tab === 'current' ? 'Current Difference' : 'Search Range'}
+          </Button>
+        ))}
+        <Box sx={{ flexGrow: 1 }} />
+        <Button 
+            variant="outlined" 
+            startIcon={<FileDownloadIcon />} 
+            onClick={handleDownload}
+            sx={{ borderRadius: '8px', textTransform: 'none' }}
+        >
+          Export Excel
+        </Button>
+      </Stack>
+
+      {/* Main DataGrid Section with Pagination */}
+      <Paper elevation={0} sx={{ borderRadius: '12px', border: '1px solid #e0e4e8', overflow: 'hidden' }}>
+        <Box sx={{ height: 600, width: '100%' }}>
+          <DataGrid 
+            rows={rows} 
+            columns={columns} 
+            // Pagination implementation
+            pageSizeOptions={[10, 25, 50]}
+            initialState={{ 
+              pagination: { paginationModel: { pageSize: 10 } } 
+            }}
+            // Row ID logic to ensure visibility
+            getRowId={(row) => row.id || `${row.BRANCH_CODE}${row.CGL}`}
+            disableRowSelectionOnClick
+            sx={{ 
+              border: 0,
+              [`& .${gridClasses.columnHeader}`]: { 
+                bgcolor: '#f8f9fa', 
+                fontWeight: 700,
+                color: '#3c4043'
+              },
+              [`& .${gridClasses.cell}`]: { 
+                  borderBottom: '1px solid #f1f3f4',
+                  fontSize: '0.875rem'
+              },
+              [`& .${gridClasses.row}:hover`]: { bgcolor: alpha('#1976d2', 0.04) }
+            }}
+          />
+        </Box>
+      </Paper>
+
+      {/* Audit History Popup */}
+      <Dialog open={openPopup} onClose={() => setOpenPopup(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Audit History</Typography>
+          <IconButton size="small" onClick={() => setOpenPopup(false)}><CloseIcon fontSize="small" /></IconButton>
+        </DialogTitle>
+        <DialogContent dividers sx={{ py: 2 }}>
+          {selectedRow ? (
+            <Stack spacing={1.5}>
+              <Typography variant="body2"><strong>GLCC:</strong> {`${selectedRow.BRANCH_CODE}${selectedRow.CURRENCY}${selectedRow.CGL}`}</Typography>
+              <Typography variant="body2" color="text.secondary">No historical discrepancies found for this entity prior to the report date.</Typography>
+            </Stack>
+          ) : (
+            <Typography variant="body2">No details available.</Typography>
+          )}
+        </DialogContent>
+      </Dialog>
+    </Box>
+  );
+}
