@@ -1,0 +1,219 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import axios from 'axios'; 
+import { DataGrid, gridClasses } from '@mui/x-data-grid';
+import { 
+  Box, Typography, Paper, Stack, Button, Divider, TextField,
+  Dialog, DialogTitle, DialogContent, IconButton, alpha, Grid, Collapse
+} from '@mui/material';
+
+// Standard project utility for file downloads
+import downloadFile from '../utils/DownloadUtils'; 
+
+// Icons
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import HistoryIcon from '@mui/icons-material/History';
+import CloseIcon from '@mui/icons-material/Close';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+
+export default function BalanceCompareDifferenceScreen() {
+  const [activeTab, setActiveTab] = useState(null); 
+  const [rows, setRows] = useState([]); 
+  const [glcc, setGlcc] = useState('');
+  const [date1, setDate1] = useState('');
+  const [date2, setDate2] = useState('');
+  const [openPopup, setOpenPopup] = useState(false);
+  const [selectedRow, setSelectedRow] = useState(null);
+
+  /**
+   * Main function to fetch grid data based on active filters.
+   * Logs tracking added to debug why 'No rows' is showing.
+   */
+  const fetchGridData = async () => {
+    console.log(">>> [GRID] Fetching Data for Tab:", activeTab);
+    console.log(">>> [GRID] Filters:", { date1, date2, glcc });
+
+    try {
+      // API call to fetch actual reconciliation data
+      const response = await axios.get('http://10.0.19.123:3000/api/fincore-data', {
+        params: { activeTab, date1, date2, glcc }
+      });
+
+      console.log(">>> [GRID] Raw Response Data:", response.data);
+
+      if (response.data && response.data.success) {
+        // DataGrid requires a unique 'id'. 
+        // We use index as a fallback if 'id' is missing from backend.
+        const dataWithIds = response.data.data.map((item, index) => ({
+          ...item,
+          id: item.id || index + 1 
+        }));
+        
+        console.log(">>> [GRID] Final Rows for Grid:", dataWithIds);
+        setRows(dataWithIds);
+      } else {
+        console.warn(">>> [GRID] Success flag FALSE or Data empty");
+        setRows([]); 
+      }
+    } catch (error) {
+      console.error(">>> [GRID] Axios Error:", error.message);
+      if (error.response) {
+        console.error(">>> [GRID] Server returned error status:", error.response.status);
+      }
+    }
+  };
+
+  /**
+   * Fetches the initial etlDate on mount.
+   * Handles the 'Mixed Content' block error.
+   */
+  useEffect(() => {
+    const fetchEtlDate = async () => {
+      try {
+        console.log(">>> [ETL] Fetching System Date...");
+        const response = await axios.get('http://10.0.19.123:3000/api/fincore-date');
+        
+        console.log(">>> [ETL] Response Data:", response.data);
+
+        if (response.data.success) {
+          console.log(">>> [ETL] Setting Date1 to:", response.data.data.etlDate);
+          setDate1(response.data.data.etlDate);
+        }
+      } catch (error) {
+        // This catch block captures the Network Error/Timed Out seen in console.
+        console.error(">>> [ETL] Fetch Error:", error.message);
+      }
+    };
+    fetchEtlDate();
+  }, []);
+
+  /**
+   * Search Trigger: Fires when filters or tabs change.
+   */
+  useEffect(() => {
+    if (activeTab) {
+      fetchGridData();
+    }
+  }, [glcc, date1, date2, activeTab]);
+
+  const handleTabClick = (tab) => {
+    if (activeTab === tab) {
+      setActiveTab(null);
+      setRows([]); 
+    } else {
+      setActiveTab(tab);
+    }
+  };
+
+  /**
+   * DataGrid Column Configuration.
+   * Fixed 'reading row' error by using (v, row) signature.
+   */
+  const columns = useMemo(() => [
+    { field: 'FIRST_ERROR_DATE', headerName: 'First Error Date', flex: 1, minWidth: 150 },
+    { field: 'REPORT_DATE', headerName: 'Report_DATE', flex: 1, minWidth: 130 },
+    { 
+      field: 'GLCC', headerName: 'GLCC', flex: 1.5, minWidth: 180,
+      valueGetter: (v, row) => {
+        const target = row || v?.row || v;
+        return target ? `${target.BRANCH_CODE}${target.CURRENCY}${target.CGL}` : "";
+      }
+    },
+    { field: 'CBS_BALANCE', headerName: 'CBS_BALANCE', flex: 1, align: 'right' },
+    { field: 'GL_BALANCE', headerName: 'GL_BALANCE', flex: 1, align: 'right' },
+    { field: 'DIFFERENCE_AMOUNT', headerName: 'DIFFERENCE_AMOUNT', flex: 1, align: 'right' }, 
+    { field: 'DIFF_YESTERDAY', headerName: 'DIFFERence Between YESTERDAY', flex: 1.2, align: 'right' },
+    { field: 'TYPE', headerName: 'TYPE', flex: 1 },
+    { field: 'HEAD', headerName: 'HEAD', flex: 1 },
+    {
+      field: 'actions', headerName: 'Details', flex: 0.8, sortable: false,
+      renderCell: (params) => (
+        // Requirement: Add history button except for New Entry rows
+        params.row?.TYPE !== 'New Entry' && (
+          <IconButton size="small" color="primary" onClick={() => { setSelectedRow(params.row); setOpenPopup(true); }}>
+            <HistoryIcon fontSize="small" />
+          </IconButton>
+        )
+      )
+    }
+  ], []);
+
+  const handleDownload = () => {
+    // Utility for Excel export
+    downloadFile(JSON.stringify(rows), 'xlsx', 'Reconciliation_Report', false);
+  };
+
+  return (
+    <Box sx={{ p: 3, bgcolor: '#f4f7f9', minHeight: '100vh' }}>
+      <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+        {['particular', 'current', 'range'].map((tab) => (
+          <Button 
+            key={tab} 
+            variant={activeTab === tab ? "contained" : "outlined"} 
+            onClick={() => handleTabClick(tab)}
+            sx={{ flex: 1, textTransform: 'none', borderRadius: '12px', fontWeight: 700, py: 1.5 }}
+          >
+            {tab === 'particular' ? 'Particular Date' : tab === 'current' ? 'Current Difference' : 'Search Range'}
+          </Button>
+        ))}
+      </Stack>
+
+      <Collapse in={activeTab !== null}>
+        <Paper elevation={0} sx={{ p: 3, mb: 3, borderRadius: '12px', border: '1px solid #e0e4e8', bgcolor: '#fff' }}>
+          <Stack direction="row" spacing={3} alignItems="center">
+            {(activeTab === 'current' || activeTab === 'range') && (
+              <TextField label="GLCC Filter" size="small" value={glcc} onChange={(e) => setGlcc(e.target.value)} />
+            )}
+            <TextField type="date" label="Report Date" size="small" InputLabelProps={{ shrink: true }} value={date1} onChange={(e) => setDate1(e.target.value)} />
+            {activeTab === 'range' && (
+              <TextField type="date" label="End Date" size="small" InputLabelProps={{ shrink: true }} value={date2} onChange={(e) => setDate2(e.target.value)} />
+            )}
+            <Divider orientation="vertical" flexItem />
+            <Button variant="outlined" color="error" startIcon={<RestartAltIcon />} onClick={() => { setGlcc(''); setDate1(''); setDate2(''); }}>Reset</Button>
+            <Button variant="contained" startIcon={<FileDownloadIcon />} onClick={handleDownload} sx={{ bgcolor: '#1e293b' }}>Export Excel</Button>
+          </Stack>
+        </Paper>
+      </Collapse>
+
+      <Paper elevation={0} sx={{ borderRadius: '12px', border: '1px solid #e0e4e8', overflow: 'hidden' }}>
+        <Box sx={{ height: 600, width: '100%' }}>
+          <DataGrid 
+            rows={rows} 
+            columns={columns} 
+            pageSizeOptions={[10, 25, 50]}
+            initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+            getRowId={(row) => row.id} // Essential for grid visibility
+            sx={{ 
+              border: 0, 
+              [`& .${gridClasses.columnHeader}`]: { bgcolor: '#f8f9fa', fontWeight: 700 } 
+            }}
+          />
+        </Box>
+      </Paper>
+
+      <Dialog open={openPopup} onClose={() => setOpenPopup(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '12px' } }}>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h6" sx={{ fontWeight: 800 }}>Details of Difference</Typography>
+          <IconButton size="small" onClick={() => setOpenPopup(false)}><CloseIcon fontSize="small" /></IconButton>
+        </DialogTitle>
+        <DialogContent dividers sx={{ py: 3 }}>
+          {selectedRow && (
+            <Grid container spacing={3}>
+              <Grid item xs={6}>
+                <Typography variant="caption" color="textSecondary" sx={{ fontWeight: 700 }}>GLCC CODE</Typography>
+                <Typography variant="body1" sx={{ fontWeight: 600 }}>{selectedRow.BRANCH_CODE}{selectedRow.CURRENCY}{selectedRow.CGL}</Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="caption" color="textSecondary" sx={{ fontWeight: 700 }}>REPORT DATE</Typography>
+                <Typography variant="body1">{selectedRow.REPORT_DATE}</Typography>
+              </Grid>
+              <Grid item xs={12} sx={{ p: 2, bgcolor: alpha('#ef4444', 0.05), borderRadius: '8px' }}>
+                <Typography variant="caption" color="error" sx={{ fontWeight: 800 }}>TOTAL DIFFERENCE AMOUNT</Typography>
+                <Typography variant="h4" color="error" sx={{ fontWeight: 900 }}>{selectedRow.DIFFERENCE_AMOUNT}</Typography>
+              </Grid>
+            </Grid>
+          )}
+        </DialogContent>
+      </Dialog>
+    </Box>
+  );
+}
