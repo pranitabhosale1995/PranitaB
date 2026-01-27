@@ -1,0 +1,48 @@
+useEffect(() => {
+    const fetchEtlDate = async () => {
+        try {
+            const response = await axios.get('/PS/api/fincore-date');
+            if (response.data.success) {
+                setSystemEtlDate(response.data.data.etlDate); // Save but don't apply to date1 yet
+            }
+        } catch (error) {
+            console.error("Error fetching system date:", error);
+        }
+    };
+    fetchEtlDate();
+}, []);
+const handleTabClick = (tab) => {
+    if (activeTab === tab) {
+        setActiveTab(null);
+        resetFilters();
+    } else {
+        setActiveTab(tab);
+        // Reset dates first
+        setGlcc('');
+        setDate2('');
+        
+        // ONLY apply system date if "particular" is clicked
+        if (tab === 'particular') {
+            setDate1(systemEtlDate); 
+        } else {
+            setDate1(''); // Keep it empty for Current and Range
+        }
+    }
+};
+useEffect(() => {
+    let filtered = [...mockRows];
+
+    if (activeTab === 'particular' && date1) {
+        filtered = filtered.filter(r => r.REPORT_DATE === date1);
+    } 
+    else if (activeTab === 'range' && date1 && date2) {
+        filtered = filtered.filter(r => r.REPORT_DATE >= date1 && r.REPORT_DATE <= date2);
+    } 
+    else if (activeTab === 'current' && glcc) {
+        const search = glcc.toLowerCase();
+        filtered = filtered.filter(r => 
+            `${r.BRANCH_CODE}${r.CURRENCY}${r.CGL}`.toLowerCase().includes(search)
+        );
+    }
+    setRows(filtered);
+}, [glcc, date1, date2, activeTab]);
