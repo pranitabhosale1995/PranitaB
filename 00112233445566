@@ -1,0 +1,137 @@
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import useApi from './useApi'; // Your existing hook
+import { DataGrid, gridClasses } from '@mui/x-data-grid';
+import { Box, Paper, Stack, Button, TextField, CircularProgress, Typography, IconButton } from '@mui/material';
+import HistoryIcon from '@mui/icons-material/History';
+
+export default function BalanceCompareDifferenceScreen() {
+    const [activeTab, setActiveTab] = useState('current');
+    const [rows, setRows] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [glcc, setGlcc] = useState('');
+    const [date1, setDate1] = useState('');
+    const [systemEtlDate, setSystemEtlDate] = useState(''); // Added to store ETL Date
+    const { callApi } = useApi();
+
+    // 1. Fetch ETL Date from fincore-date API on mount
+    useEffect(() => {
+        const getEtlDate = async () => {
+            try {
+                const res = await callApi('/PS/fincore-date', {}, "GET");
+                if (res?.data?.success) {
+                    const etl = res.data.data.etlDate;
+                    setSystemEtlDate(etl);
+                    // Requirement: Set ETL date as default for Particular/Current tabs
+                    setDate1(etl);
+                }
+            } catch (err) { console.error("ETL Date Error", err); }
+        };
+        getEtlDate();
+    }, [callApi]);
+
+    const fetchDifferences = useCallback(async () => {
+        // Only fetch if date is present or it's current tab
+        if (activeTab !== 'current' && !date1) return;
+
+        setLoading(true);
+        try {
+            const response = await callApi('/RS/differences', {
+                params: { page: 0, size: 500, reportDate: date1 }
+            }, "GET");
+
+            const content = response?.data?.content || response?.data?.content || [];
+            if (Array.isArray(content)) {
+                const mappedRows = content.map((item, index) => ({
+                    id: item.id || `row-${index}`,
+                    ERROR_DATE: '', 
+                    REPORT_DATE: item.reconRunDate || '-',
+                    GLCC_VAL: `${item.branchCode || ''}${item.currency || ''}${item.cgl || ''}`,
+                    CBS_BALANCE: item.cbsBalance ?? 0,
+                    GL_BALANCE: item.glBalance ?? 0,
+                    DIFFERENCE_AMOUNT: item.differenceAmount ?? 0,
+                    DIFF_YESTERDAY: item.diffBwYesterday ?? 0,
+                    TYPE_VAL: item.type || '-',
+                    HEAD_VAL: item.head || '-'
+                }));
+                setRows(mappedRows);
+            }
+        } catch (err) { setRows([]); }
+        finally { setLoading(false); }
+    }, [date1, activeTab, callApi]);
+
+    useEffect(() => {
+        fetchDifferences();
+    }, [fetchDifferences]);
+
+    // 2. Dynamic Columns Logic: Only show History if Particular tab is active
+    const columns = useMemo(() => {
+        const baseColumns = [
+            { field: 'ERROR_DATE', headerName: 'Error Date', flex: 1 },
+            { field: 'REPORT_DATE', headerName: 'Report Date', flex: 1 },
+            { field: 'GLCC_VAL', headerName: 'GLCC', flex: 1.5 },
+            { field: 'CBS_BALANCE', headerName: 'CBS Balance', flex: 1, align: 'right' },
+            { field: 'GL_BALANCE', headerName: 'GL Balance', flex: 1, align: 'right' },
+            { 
+                field: 'DIFFERENCE_AMOUNT', headerName: 'Difference', flex: 1,
+                renderCell: (params) => <Typography color="error" fontWeight="bold">{params.value}</Typography>
+            },
+            { field: 'DIFF_YESTERDAY', headerName: 'Diff Yesterday', flex: 1 },
+            { field: 'TYPE_VAL', headerName: 'Type', flex: 1 },
+        ];
+
+        // Requirement: Add History column ONLY for Particular Search tab
+        if (activeTab === 'particular') {
+            baseColumns.push({
+                field: 'history',
+                headerName: 'History',
+                width: 90,
+                renderCell: () => (
+                    <IconButton color="primary" size="small">
+                        <HistoryIcon />
+                    </IconButton>
+                ),
+            });
+        }
+
+        return baseColumns;
+    }, [activeTab]);
+
+    return (
+        <Box sx={{ p: 3, bgcolor: '#f8fafd', minHeight: '100vh' }}>
+            <Typography variant="h5" sx={{ mb: 3, fontWeight: 700 }}>Balance Compare Diffrence</Typography>
+
+            <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+                {['particular', 'current', 'range'].map((tab) => (
+                    <Button 
+                        key={tab} 
+                        variant={activeTab === tab ? "contained" : "outlined"}
+                        onClick={() => { 
+                            setActiveTab(tab); 
+                            // When switching to particular, reset date to system ETL date
+                            if (tab === 'particular') setDate1(systemEtlDate);
+                        }}
+                    >
+                        {tab.toUpperCase()}
+                    </Button>
+                ))}
+            </Stack>
+
+            <Paper elevation={0} sx={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+                <Box sx={{ height: 600, width: '100%', position: 'relative' }}>
+                    {loading && (
+                        <Box sx={{ position: 'absolute', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', zIndex: 10, bgcolor: 'rgba(255,255,255,0.7)' }}>
+                            <CircularProgress />
+                        </Box>
+                    )}
+                    <DataGrid
+                        rows={rows}
+                        columns={columns}
+                        pageSizeOptions={[10, 25, 50]}
+                        initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+                        sx={{ border: 0, [`& .${gridClasses.columnHeader}`]: { bgcolor: '#f1f5f9' } }}
+                    />
+                </Box>
+            </Paper>
+        </Box>
+    );
+}
