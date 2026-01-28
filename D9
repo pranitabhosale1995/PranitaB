@@ -1,0 +1,24 @@
+useEffect(() => {
+    const getEtlDate = async () => {
+        if (isExpanded && activeTab === 'particular') {
+            console.log("1. Inside useEffect: API call starting..."); // Check if logic enters here
+            try {
+                const res = await callApi('/PS/fincore-date', {}, "GET");
+                console.log("2. API Response Received:", res?.data); // Check exact API response
+                
+                if (res?.data?.success) {
+                    const apiDate = res.data.data.etlDate; 
+                    console.log("3. Extracted Date:", apiDate); // Check the date string format
+                    
+                    setSystemEtlDate(apiDate);
+                    setDate1(apiDate); 
+                    console.log("4. States Updated. Current date1 value:", apiDate);
+                }
+            } catch (err) { console.error("Date fetch error", err); }
+        }
+    };
+    getEtlDate();
+}, [isExpanded, activeTab]);
+
+
+<Typography>Debug Date Value: {date1}</Typography> 
