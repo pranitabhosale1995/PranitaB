@@ -1,0 +1,69 @@
+const [startDate, setStartDate] = useState('');
+const [endDate, setEndDate] = useState('');
+const [rangeGlcc, setRangeGlcc] = useState(''); // Range sathi vegali GLCC state
+
+const handleRangeSearchClick = () => {
+    setIsExpanded(!isExpanded);
+    setActiveTab('range'); // Navin tab identity
+};
+
+const handleRangeSearchClick = () => {
+    setIsExpanded(!isExpanded);
+    setActiveTab('range'); // Navin tab identity
+};
+
+<Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+    <Button variant="contained" onClick={handleParticularSearchClick}>
+        Particular Search
+    </Button>
+    <Button variant="contained" color="secondary" onClick={handleRangeSearchClick}>
+        Range Search
+    </Button>
+</Stack>
+
+{isExpanded && activeTab === 'range' && (
+    <Paper sx={{ p: 2, mb: 2, border: '1px solid #ddd' }}>
+        <Stack direction="row" spacing={2} alignItems="center">
+            {/* GLCC Compulsory Input */}
+            <TextField 
+                label="GLCC (Compulsory)" 
+                size="small" 
+                required
+                value={rangeGlcc}
+                onChange={(e) => setRangeGlcc(e.target.value)}
+                sx={{ width: 250 }}
+            />
+
+            {/* Start Date */}
+            <TextField 
+                type="date" 
+                label="Start Date" 
+                size="small" 
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                sx={{ width: 180 }}
+            />
+
+            {/* End Date */}
+            <TextField 
+                type="date" 
+                label="End Date" 
+                size="small" 
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                sx={{ width: 180 }}
+            />
+
+            <Button 
+                variant="outlined" 
+                color="error" 
+                startIcon={<RestartAltIcon />} 
+                onClick={handleReset}
+            >
+                Reset
+            </Button>
+        </Stack>
+    </Paper>
+)}
