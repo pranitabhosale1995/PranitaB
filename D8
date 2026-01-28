@@ -1,0 +1,25 @@
+useEffect(() => {
+    const getEtlDate = async () => {
+        if (isExpanded && activeTab === 'particular') {
+            try {
+                const res = await callApi('/PS/fincore-date', {}, "GET");
+                if (res?.data?.success) {
+                    // API Date: "2026-01-12"
+                    const apiDate = res.data.data.etlDate; 
+                    
+                    setSystemEtlDate(apiDate);
+                    setDate1(apiDate);
+
+                    // ✅ Forcefully UI madhe date dakhavnyasathi DOM access kara
+                    setTimeout(() => {
+                        const dateInput = document.querySelector('input[type="date"]');
+                        if (dateInput) {
+                            dateInput.value = apiDate;
+                        }
+                    }, 100);
+                }
+            } catch (err) { console.error("Date fetch error", err); }
+        }
+    };
+    getEtlDate();
+}, [isExpanded, activeTab]);
