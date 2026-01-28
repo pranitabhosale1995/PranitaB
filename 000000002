@@ -1,0 +1,187 @@
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { DataGrid, gridClasses } from '@mui/x-data-grid';
+import { Box, Button, TextField, Stack, Paper, CircularProgress, Typography, IconButton } from '@mui/material';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import HistoryIcon from '@mui/icons-material/History';
+import useApi from "../../hooks/useApi"; 
+
+export default function BalanceCompareDifferenceScreen() {
+    // Component States
+    const [activeTab, setActiveTab] = useState('current');
+    const [allData, setAllData] = useState([]); // Master state to hold API response
+    const [loading, setLoading] = useState(false);
+    const [glccSearch, setGlccSearch] = useState(''); // Client-side search state
+    const [date1, setDate1] = useState(''); 
+    const [date2, setDate2] = useState(''); 
+    const [systemEtlDate, setSystemEtlDate] = useState('');
+    const { callApi } = useApi();
+
+    // 1. Fetch Initial ETL Date on Load
+    useEffect(() => {
+        const getEtlDate = async () => {
+            try {
+                const res = await callApi('/PS/fincore-date', {}, "GET");
+                if (res?.data?.success) {
+                    const etl = res.data.data.etlDate;
+                    setSystemEtlDate(etl);
+                    setDate1(etl); // Set default date for landing
+                }
+            } catch (err) { 
+                console.error("Failed to fetch ETL date"); 
+            }
+        };
+        getEtlDate();
+    }, [callApi]);
+
+    // 2. API Fetch Logic (Called only when Tab or Date changes)
+    const fetchTableData = useCallback(async () => {
+        if (!date1 && !systemEtlDate) return;
+
+        setLoading(true);
+        try {
+            const response = await callApi('/RS/differences', {
+                params: { 
+                    page: 0, 
+                    size: 1000, // Fetch large set for client-side filtering
+                    reportDate: date1 || systemEtlDate,
+                    endDate: activeTab === 'range' ? date2 : '' 
+                }
+            }, "GET");
+
+            const content = response?.data?.content || response?.data || [];
+            
+            if (Array.isArray(content)) {
+                const mapped = content.map((item, index) => ({
+                    id: item.id || `row-${index}`, 
+                    ERROR_DATE: '', // Empty as per requirement
+                    REPORT_DATE: item.reconRunDate || '-',
+                    // Requirement: concat branchCode, currency, and cgl
+                    GLCC_VAL: `${item.branchCode || ''}${item.currency || ''}${item.cgl || ''}`,
+                    CBS_BALANCE: item.cbsBalance ?? 0,
+                    GL_BALANCE: item.glBalance ?? 0,
+                    DIFFERENCE_AMOUNT: item.differenceAmount ?? 0,
+                    DIFF_YESTERDAY: item.diffBwYesterday ?? 0,
+                    TYPE_VAL: item.type || '-',
+                    HEAD_VAL: item.head || '-'
+                }));
+                setAllData(mapped);
+            }
+        } catch (err) { 
+            setAllData([]);
+        } finally { 
+            setLoading(false); 
+        }
+    }, [date1, date2, activeTab, systemEtlDate, callApi]);
+
+    // Trigger fetch on tab or date change (excluding Range Search)
+    useEffect(() => {
+        if (activeTab !== 'range') {
+            fetchTableData();
+        }
+    }, [activeTab, date1, fetchTableData]);
+
+    // 3. Client-Side Search Logic (Filters table without calling API)
+    const filteredRows = useMemo(() => {
+        if (!glccSearch) return allData;
+        return allData.filter(row => 
+            row.GLCC_VAL.toLowerCase().includes(glccSearch.toLowerCase())
+        );
+    }, [glccSearch, allData]);
+
+    // Column Definitions
+    const columns = useMemo(() => {
+        const cols = [
+            { field: 'ERROR_DATE', headerName: 'Error Date', flex: 1 },
+            { field: 'REPORT_DATE', headerName: 'Report Date', flex: 1 },
+            { field: 'GLCC_VAL', headerName: 'GLCC', flex: 1.5 },
+            { field: 'CBS_BALANCE', headerName: 'CBS Balance', flex: 1 },
+            { field: 'GL_BALANCE', headerName: 'GL Balance', flex: 1 },
+            { 
+                field: 'DIFFERENCE_AMOUNT', headerName: 'Difference', flex: 1,
+                renderCell: (p) => <Typography color="error" fontWeight="bold">{p.value}</Typography>
+            },
+            { field: 'DIFF_YESTERDAY', headerName: 'Diff Yesterday', flex: 1 },
+            { field: 'TYPE_VAL', headerName: 'Type', flex: 1 },
+        ];
+        // Action column only for Particular Date tab
+        if (activeTab === 'particular') {
+            cols.push({
+                field: 'actions', headerName: 'Action', width: 80,
+                renderCell: () => <IconButton color="primary"><HistoryIcon /></IconButton>
+            });
+        }
+        return cols;
+    }, [activeTab]);
+
+    return (
+        <Box sx={{ p: 3, bgcolor: '#f8fafd', minHeight: '100vh' }}>
+            <Typography variant="h5" sx={{ mb: 3, fontWeight: 700 }}>Balance Compare Diffrence</Typography>
+
+            {/* TAB SELECTION */}
+            <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+                {['particular', 'current', 'range'].map((t) => (
+                    <Button key={t} variant={activeTab === t ? "contained" : "outlined"} 
+                        onClick={() => { 
+                            setActiveTab(t); 
+                            setGlccSearch(''); 
+                            if (t === 'particular' || t === 'current') setDate1(systemEtlDate);
+                        }} sx={{ flex: 1, py: 1.2, borderRadius: '8px', fontWeight: 'bold' }}>
+                        {t.toUpperCase()}
+                    </Button>
+                ))}
+            </Stack>
+
+            {/* SEARCH CONTROLS */}
+            <Paper elevation={0} sx={{ p: 2.5, mb: 3, border: '1px solid #e0e4e8', borderRadius: '12px' }}>
+                <Stack direction="row" spacing={2} alignItems="center">
+                    
+                    {/* Client-side Search Field */}
+                    <TextField 
+                        label="Search GLCC in Table" 
+                        size="small" 
+                        value={glccSearch} 
+                        onChange={(e) => setGlccSearch(e.target.value)} 
+                        sx={{ width: 300 }} 
+                        placeholder="Filter by GLCC..."
+                    />
+                    
+                    <TextField 
+                        type="date" 
+                        label={activeTab === 'range' ? "Start Date" : "Report Date"} 
+                        size="small" 
+                        value={date1} 
+                        onChange={(e) => setDate1(e.target.value)} 
+                        InputLabelProps={{ shrink: true }} 
+                        sx={{ width: 220 }} 
+                    />
+
+                    {activeTab === 'range' && (
+                        <>
+                            <TextField type="date" label="End Date" size="small" value={date2} 
+                                onChange={(e) => setDate2(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ width: 220 }} />
+                            <Button variant="contained" onClick={fetchTableData}>Power Search</Button>
+                        </>
+                    )}
+                    
+                    <Button variant="outlined" startIcon={<RestartAltIcon />} 
+                        onClick={() => { setGlccSearch(''); setDate1(systemEtlDate); setDate2(''); fetchTableData(); }}>Reset</Button>
+                </Stack>
+            </Paper>
+
+            {/* DATAGRID DATA DISPLAY */}
+            <Paper elevation={0} sx={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+                <Box sx={{ height: 500, width: '100%', position: 'relative' }}>
+                    {loading && <Box sx={{ position: 'absolute', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', zIndex: 10, bgcolor: 'rgba(255,255,255,0.7)' }}><CircularProgress /></Box>}
+                    
+                    <DataGrid 
+                        rows={filteredRows} 
+                        columns={columns} 
+                        pageSizeOptions={[10, 25, 50]}
+                        initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+                        sx={{ border: 0, [`& .${gridClasses.columnHeader}`]: { bgcolor: '#f1f5f9', fontWeight: 'bold' } }} 
+                    />
+                </Box>
+            </Paper>
+        </Box>
+    );
+}
