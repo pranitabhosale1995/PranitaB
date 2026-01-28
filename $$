@@ -1,0 +1,61 @@
+// Particular Search Function Update
+const handleParticularSearchClick = () => {
+    if (activeTab === 'particular' && isExpanded) {
+        setIsExpanded(false); // Jar adhipasunch particular open asel tar close kara
+    } else {
+        setIsExpanded(true);
+        setActiveTab('particular'); // Particular tab open kara
+    }
+};
+
+// Range Search Function Update
+const handleRangeSearchClick = () => {
+    if (activeTab === 'range' && isExpanded) {
+        setIsExpanded(false); // Jar adhipasunch range open asel tar close kara
+    } else {
+        setIsExpanded(true);
+        setActiveTab('range'); // Range tab open kara
+    }
+};
+
+
+<Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+    <Button 
+        variant={activeTab === 'particular' && isExpanded ? "contained" : "outlined"} 
+        onClick={handleParticularSearchClick}
+        sx={{ textTransform: 'none' }}
+    >
+        Particular Search
+    </Button>
+    <Button 
+        variant={activeTab === 'range' && isExpanded ? "contained" : "outlined"} 
+        color="secondary" 
+        onClick={handleRangeSearchClick}
+        sx={{ textTransform: 'none' }}
+    >
+        Range Search
+    </Button>
+</Stack>
+
+{/* Particular Search Panel */}
+{isExpanded && activeTab === 'particular' && (
+    <Paper sx={{ p: 2, mb: 2, border: '1px solid #ddd' }}>
+        <Stack direction="row" spacing={2} alignItems="center">
+            <TextField type="date" label="Report Date" value={date1} onChange={(e) => setDate1(e.target.value)} InputLabelProps={{ shrink: true }} />
+            <TextField label="Search GLCC" value={glccSearch} onChange={(e) => setGlccSearch(e.target.value)} />
+            <Button onClick={handleReset} variant="outlined">Reset</Button>
+        </Stack>
+    </Paper>
+)}
+
+{/* Range Search Panel */}
+{isExpanded && activeTab === 'range' && (
+    <Paper sx={{ p: 2, mb: 2, border: '1px solid #ddd' }}>
+        <Stack direction="row" spacing={2} alignItems="center">
+            <TextField label="GLCC (Compulsory)" required size="small" value={rangeGlcc} onChange={(e) => setRangeGlcc(e.target.value)} />
+            <TextField type="date" label="Start Date" size="small" value={startDate} onChange={(e) => setStartDate(e.target.value)} InputLabelProps={{ shrink: true }} />
+            <TextField type="date" label="End Date" size="small" value={endDate} onChange={(e) => setEndDate(e.target.value)} InputLabelProps={{ shrink: true }} />
+            <Button onClick={handleReset} variant="outlined" color="error">Reset</Button>
+        </Stack>
+    </Paper>
+)}
