@@ -1,0 +1,44 @@
+useEffect(() => {
+    const getEtlDate = async () => {
+        if (isExpanded && activeTab === 'particular') {
+            try {
+                const res = await callApi('/PS/fincore-date', {}, "GET");
+                if (res?.data?.success) {
+                    const etl = res.data.data.etlDate; // "2026-01-12"
+                    
+                    setSystemEtlDate(etl);
+
+
+
+
+
+useEffect(() => {
+    const getEtlDate = async () => {
+        if (isExpanded && activeTab === 'particular') {
+            console.log("1. Inside useEffect: API call starting...");
+            try {
+                const res = await callApi('/PS/fincore-date', {}, "GET");
+                
+                // 🔍 DEBUG: Purna response check kara
+                console.log("Full API Response:", res); 
+
+                // Tumcha data bahutek 'res.data' madhe nasel tar to direct 'res' madhe asu shakato
+                const finalData = res?.data?.data || res?.data || res;
+
+                if (finalData?.success || finalData?.etlDate) {
+                    const etlDateValue = finalData?.etlDate || finalData?.data?.etlDate;
+                    
+                    console.log("3. Found Date Value:", etlDateValue);
+
+                    if (etlDateValue) {
+                        setSystemEtlDate(etlDateValue);
+                        setDate1(String(etlDateValue)); // Force string
+                    }
+                } else {
+                    console.log("API Success condition not met");
+                }
+            } catch (err) { console.error("Date fetch error", err); }
+        }
+    };
+    getEtlDate();
+}, [isExpanded, activeTab]);
