@@ -1,0 +1,29 @@
+// ✅ Correct Logic: Sync API date with Input Value
+useEffect(() => {
+    const getEtlDate = async () => {
+        // Trigger only when section is expanded AND tab is particular
+        if (isExpanded && activeTab === 'particular') {
+            try {
+                const res = await callApi('/PS/fincore-date', {}, "GET");
+                if (res?.data?.success) {
+                    const apiDate = res.data.data.etlDate; // "2026-01-12"
+                    
+                    // Force state update sequence
+                    setSystemEtlDate(apiDate);
+                    setDate1(apiDate); 
+                }
+            } catch (err) { console.error("Date fetch error", err); }
+        }
+    };
+
+    getEtlDate();
+}, [isExpanded, activeTab]); // Listen for expansion event
+
+<TextField 
+    type="date" 
+    label="Report Date" 
+    size="small" 
+    value={date1 || ''} // ✅ Value binding ensure kara
+    onChange={(e) => setDate1(e.target.value)} 
+    InputLabelProps={{ shrink: true }} // overlap talyasathi
+/>
