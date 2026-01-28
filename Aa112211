@@ -1,0 +1,219 @@
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import useApi from "../../hooks/useApi";
+import { DataGrid, gridClasses } from '@mui/x-data-grid';
+import {
+    Box, Paper, Stack, Button, TextField, Divider,
+    Dialog, DialogTitle, DialogContent, IconButton, Grid, Collapse, CircularProgress, Typography
+} from '@mui/material';
+import HistoryIcon from '@mui/icons-material/History';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+
+export default function BalanceCompareDifferenceScreen() {
+    const [activeTab, setActiveTab] = useState('current');
+    const [rows, setRows] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [glcc, setGlcc] = useState('');
+    const [date1, setDate1] = useState(''); // Start Date / Report Date
+    const [date2, setDate2] = useState(''); // End Date
+    const [systemEtlDate, setSystemEtlDate] = useState('');
+    const [openPopup, setOpenPopup] = useState(false);
+    const [selectedRow, setSelectedRow] = useState(null);
+    const { callApi } = useApi();
+
+    // 1. Initial ETL Date fetch karne (Requirement: Particular Date sathi default)
+    useEffect(() => {
+        const getInitialDate = async () => {
+            try {
+                const res = await callApi('/PS/fincore-date', {}, "GET");
+                if (res?.data?.success) {
+                    const etlDate = res.data.data.etlDate;
+                    setSystemEtlDate(etlDate);
+                    // Default logic for Particular Date tab
+                    if (activeTab === 'particular') setDate1(etlDate);
+                }
+            } catch (err) {
+                console.error("Date Fetch Error", err);
+            }
+        };
+        getInitialDate();
+    }, [callApi]);
+
+    // 2. Search API Logic
+    const fetchDifferences = useCallback(async () => {
+        // Validation logic based on tabs
+        if (activeTab === 'particular' && !date1) return;
+        if (activeTab === 'range' && (!date1 || !date2)) return;
+
+        setLoading(true);
+        try {
+            const response = await callApi('/RS/differences', {
+                params: { 
+                    page: 0, 
+                    size: 100, 
+                    reportDate: date1 || systemEtlDate, 
+                    endDate: date2, 
+                    glccFilter: glcc,
+                    searchType: activeTab // API la tab type kalavnya sathi
+                }
+            }, "GET");
+
+            const content = response?.data?.content || [];
+            
+            if (Array.isArray(content)) {
+                const mappedRows = content.map((item, index) => ({
+                    ...item,
+                    id: index + 1,
+                    ERROR_DATE: '', 
+                    REPORT_DATE: item.reconRunDate || '-',
+                    // GLCC Requirement: branchcode + currency + CGL (eksalag)
+                    GLCC_VAL: `${item.branchCode || ''}${item.currency || ''}${item.cgl || ''}`,
+                    CBS_BALANCE: item.cbsBalance ?? 0,
+                    GL_BALANCE: item.glBalance ?? 0,
+                    DIFFERENCE_AMOUNT: item.differenceAmount ?? 0,
+                    DIFF_YESTERDAY: item.diffBwYesterday ?? 0,
+                    TYPE_VAL: item.type || '-',
+                    HEAD_VAL: item.head || '-'
+                }));
+                setRows(mappedRows);
+            }
+        } catch (err) {
+            setRows([]);
+        } finally {
+            setLoading(false);
+        }
+    }, [date1, date2, glcc, activeTab, systemEtlDate, callApi]);
+
+    // Auto-trigger for Current and Particular, but 'Power' for Range
+    useEffect(() => {
+        if (activeTab !== 'range') {
+            fetchDifferences();
+        }
+    }, [activeTab, date1, glcc, fetchDifferences]);
+
+    const columns = useMemo(() => {
+        const base = [
+            { field: 'ERROR_DATE', headerName: 'Error Date', flex: 1 },
+            { field: 'REPORT_DATE', headerName: 'Report Date', flex: 1 },
+            { field: 'GLCC_VAL', headerName: 'GLCC', flex: 1.5 },
+            { field: 'CBS_BALANCE', headerName: 'CBS Balance', flex: 1, align: 'right' },
+            { field: 'GL_BALANCE', headerName: 'GL Balance', flex: 1, align: 'right' },
+            { 
+                field: 'DIFFERENCE_AMOUNT', 
+                headerName: 'Difference', 
+                flex: 1, 
+                renderCell: (params) => <Typography color="error" fontWeight={600}>{params.value}</Typography>
+            },
+            { field: 'DIFF_YESTERDAY', headerName: 'Diff Yesterday', flex: 1 },
+            { field: 'TYPE_VAL', headerName: 'Type', flex: 1 },
+            { field: 'HEAD_VAL', headerName: 'Head', flex: 1 },
+        ];
+        // Requirement: Action column fakt Particular Date tab madhech
+        if (activeTab === 'particular') {
+            base.push({
+                field: 'actions', headerName: 'Action', width: 80,
+                renderCell: (params) => (
+                    <IconButton color="primary" onClick={() => { setSelectedRow(params.row); setOpenPopup(true); }}>
+                        <HistoryIcon />
+                    </IconButton>
+                )
+            });
+        }
+        return base;
+    }, [activeTab]);
+
+    return (
+        <Box sx={{ p: 3, bgcolor: '#f4f7f9', minHeight: '100vh' }}>
+            <Typography variant="h5" sx={{ mb: 3, fontWeight: 700 }}>Balance Compare Difference</Typography>
+
+            <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+                {['particular', 'current', 'range'].map((tab) => (
+                    <Button
+                        key={tab}
+                        variant={activeTab === tab ? "contained" : "outlined"}
+                        onClick={() => {
+                            setActiveTab(tab);
+                            setGlcc(''); setDate2('');
+                            if (tab === 'particular') setDate1(systemEtlDate);
+                            else setDate1('');
+                        }}
+                        sx={{ flex: 1, py: 1.5, borderRadius: '8px' }}
+                    >
+                        {tab.toUpperCase()} {tab === 'range' ? 'SEARCH' : 'DATE'}
+                    </Button>
+                ))}
+            </Stack>
+
+            <Collapse in={activeTab !== null}>
+                <Paper elevation={0} sx={{ p: 3, mb: 3, border: '1px solid #e0e4e8', borderRadius: '12px' }}>
+                    {/* Tab 1: Particular Date Search */}
+                    {activeTab === 'particular' && (
+                        <Stack direction="row" spacing={2} alignItems="center">
+                            <TextField
+                                type="date" label="Report Date (ETL)" size="small"
+                                InputLabelProps={{ shrink: true }}
+                                value={date1} onChange={(e) => setDate1(e.target.value)}
+                                sx={{ width: 220 }}
+                            />
+                            <Button variant="outlined" color="error" startIcon={<RestartAltIcon />} onClick={() => setDate1(systemEtlDate)}>Reset</Button>
+                            <Button variant="contained" startIcon={<FileDownloadIcon />}>Download Excel</Button>
+                        </Stack>
+                    )}
+
+                    {/* Tab 2: Current Search (GLCC Based) */}
+                    {activeTab === 'current' && (
+                        <Stack direction="row" spacing={2} alignItems="center">
+                            <TextField
+                                label="GLCC Filter" size="small" value={glcc}
+                                onChange={(e) => setGlcc(e.target.value)} sx={{ width: 300 }}
+                            />
+                            <TextField
+                                type="date" label="Date (Read Only)" size="small" disabled
+                                InputLabelProps={{ shrink: true }} value={systemEtlDate} sx={{ width: 200 }}
+                            />
+                            <Button variant="outlined" color="error" startIcon={<RestartAltIcon />} onClick={() => setGlcc('')}>Reset</Button>
+                            <Button variant="contained">Download</Button>
+                        </Stack>
+                    )}
+
+                    {/* Tab 3: Range Search */}
+                    {activeTab === 'range' && (
+                        <Stack spacing={2}>
+                            <Stack direction="row" spacing={2} alignItems="center">
+                                <TextField
+                                    type="date" label="Start Date" size="small"
+                                    InputLabelProps={{ shrink: true }} value={date1}
+                                    onChange={(e) => setDate1(e.target.value)} sx={{ width: 200 }}
+                                />
+                                <TextField
+                                    type="date" label="End Date" size="small"
+                                    InputLabelProps={{ shrink: true }} value={date2}
+                                    onChange={(e) => setDate2(e.target.value)} sx={{ width: 200 }}
+                                />
+                                <Button variant="contained" color="primary" onClick={fetchDifferences}>Power</Button>
+                                <Button variant="outlined" color="error" startIcon={<RestartAltIcon />} onClick={() => { setDate1(''); setDate2(''); setGlcc(''); }}>Reset</Button>
+                            </Stack>
+                            <TextField
+                                label="GLCC Filter" fullWidth size="small" value={glcc}
+                                onChange={(e) => setGlcc(e.target.value)} placeholder="Search GLCC..."
+                            />
+                        </Stack>
+                    )}
+                </Paper>
+            </Collapse>
+
+            <Paper elevation={0} sx={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+                <Box sx={{ height: 600, width: '100%', position: 'relative' }}>
+                    {loading && <Box sx={{ position: 'absolute', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', zIndex: 10, bgcolor: 'rgba(255,255,255,0.7)' }}><CircularProgress /></Box>}
+                    <DataGrid
+                        rows={rows}
+                        columns={columns}
+                        pageSizeOptions={[10, 25, 50]}
+                        initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+                        sx={{ border: 0, [`& .${gridClasses.columnHeader}`]: { bgcolor: '#f1f5f9' } }}
+                    />
+                </Box>
+            </Paper>
+        </Box>
+    );
+}
