@@ -1,0 +1,19 @@
+const handleParticularSearchClick = async () => {
+    const nextExpandState = !isExpanded;
+    setIsExpanded(nextExpandState);
+    setActiveTab('particular');
+
+    if (nextExpandState) {
+        try {
+            const res = await callApi('/PS/fincore-date', {}, "GET");
+            if (res?.data?.success) {
+                const etl = res.data.data.etlDate; // 2026-01-12
+                
+                setSystemEtlDate(etl);
+                setDate1(etl); // Setting the state
+            }
+        } catch (err) {
+            console.error("API Error:", err);
+        }
+    }
+};
