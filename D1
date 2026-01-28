@@ -1,0 +1,87 @@
+const columns = useMemo(() => {
+    const baseCols = [
+        { field: 'ERROR_DATE', headerName: 'Error Date', flex: 1 },
+        { field: 'REPORT_DATE', headerName: 'Report Date', flex: 1 },
+        { field: 'GLCC_VAL', headerName: 'GLCC', flex: 1.5 },
+        { field: 'CBS_BALANCE', headerName: 'CBS Balance', flex: 1, align: 'right' },
+        { field: 'GL_BALANCE', headerName: 'GL Balance', flex: 1, align: 'right' },
+        { 
+            field: 'DIFFERENCE_AMOUNT', headerName: 'Difference', flex: 1,
+            renderCell: (params) => <Typography color="error" fontWeight="bold">{params.value}</Typography>
+        },
+        { field: 'DIFF_YESTERDAY', headerName: 'Diff Yesterday', flex: 1 },
+        { field: 'TYPE_VAL', headerName: 'Type', flex: 1 },
+        { field: 'HEAD_VAL', headerName: 'Head', flex: 1 },
+    ];
+
+    // ✅ Requirement: Add History ONLY when Particular tab is active
+    if (activeTab === 'particular') {
+        baseCols.push({
+            field: 'history',
+            headerName: 'History',
+            width: 90,
+            renderCell: () => (
+                <IconButton color="primary" size="small">
+                    <HistoryIcon />
+                </IconButton>
+            ),
+        });
+    }
+
+    return baseCols;
+}, [activeTab]); // Triggers when tab changes
+
+
+
+
+useEffect(() => {
+    const getEtlDate = async () => {
+        try {
+            const res = await callApi('/PS/fincore-date', {}, "GET");
+            if (res?.data?.success) {
+                const etl = res.data.data.etlDate;
+                setSystemEtlDate(etl); // Store ETL date locally
+                
+                // Requirement: Set default date for Particular tab
+                if (activeTab === 'particular') {
+                    setDate1(etl);
+                }
+            }
+        } catch (err) {
+            console.error("ETL Date fetch failed");
+        }
+    };
+    getEtlDate();
+}, [callApi, activeTab]); // Updates when tab switches
+
+
+
+
+
+{/* Particular Search specific controls */}
+<Paper elevation={0} sx={{ p: 2.5, mb: 3, border: '1px solid #e0e4e8', borderRadius: '12px' }}>
+    <Stack direction="row" spacing={2} alignItems="center">
+        
+        {/* Date selection: Resets to systemEtlDate */}
+        <TextField 
+            type="date" 
+            label="Report Date" 
+            size="small" 
+            value={date1} 
+            onChange={(e) => setDate1(e.target.value)} 
+            InputLabelProps={{ shrink: true }} 
+            sx={{ width: 220 }} 
+        />
+
+        {/* Reset Functionality: Resets date and clears state */}
+        <Button 
+            variant="outlined" 
+            startIcon={<RestartAltIcon />} 
+            onClick={() => {
+                setDate1(systemEtlDate); // Resetting back to ETL date
+            }}
+        >
+            Reset
+        </Button>
+    </Stack>
+</Paper>
