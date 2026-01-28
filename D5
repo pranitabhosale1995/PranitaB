@@ -1,0 +1,27 @@
+// ✅ Logic: Fetch date only when particular search is expanded
+useEffect(() => {
+    const fetchEtlDate = async () => {
+        // Only trigger if expanded AND we are on particular tab
+        if (isExpanded && activeTab === 'particular') {
+            try {
+                const res = await callApi('/PS/fincore-date', {}, "GET");
+                if (res?.data?.success) {
+                    const etl = res.data.data.etlDate; // 2026-01-12
+                    
+                    setSystemEtlDate(etl);
+                    // Forcefully set date1 so UI and fetchDifferences both get the value
+                    setDate1(etl); 
+                }
+            } catch (err) {
+                console.error("ETL fetch failed:", err);
+            }
+        }
+    };
+
+    fetchEtlDate();
+}, [isExpanded, activeTab, callApi]); // Triggers correctly on expansion
+
+const handleParticularSearchClick = () => {
+    setIsExpanded(!isExpanded);
+    setActiveTab('particular');
+};
