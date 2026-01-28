@@ -1,0 +1,6 @@
+const handleReset = () => {
+    setStartDate('');   // Reset start date
+    setEndDate('');     // Reset end date
+    setRangeGlcc('');   // Reset compulsory GLCC
+    setRows([]);        // Table rows clear kara
+};
