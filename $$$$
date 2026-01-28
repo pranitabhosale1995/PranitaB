@@ -1,0 +1,6 @@
+useEffect(() => {
+    // Range tab madhe GLCC compulsory aslyamule check kara
+    if (activeTab === 'range' && rangeGlcc) {
+        fetchDifferences(); 
+    }
+}, [rangeGlcc, startDate, endDate, activeTab, fetchDifferences]); 
