@@ -1,0 +1,29 @@
+const handleParticularSearchClick = async () => {
+    // 1. Capture the next state to avoid using stale state in the logic below
+    const nextExpandedState = !isExpanded;
+    setIsExpanded(nextExpandedState);
+    setActiveTab('particular');
+
+    // 2. Only fetch the date when the section is being opened (expanded)
+    if (nextExpandedState) {
+        try {
+            // API call to fetch system ETL date
+            const res = await callApi('/PS/fincore-date', {}, "GET");
+            
+            if (res?.data?.success) {
+                const etl = res.data.data.etlDate; // Verified format: YYYY-MM-DD
+                
+                // 3. Update the underlying system state
+                setSystemEtlDate(etl);
+
+                // 4. Force a minor delay to ensure the UI has rendered the input field
+                // before binding the date1 value.
+                setTimeout(() => {
+                    setDate1(etl); 
+                }, 50);
+            }
+        } catch (err) {
+            console.error("API Error during ETL fetch:", err);
+        }
+    }
+};
