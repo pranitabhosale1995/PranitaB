@@ -1,0 +1,25 @@
+const filteredRows = useMemo(() => {
+    // Start with the full data set returned by the API
+    let result = [...rows];
+
+    // 1. Client-side filter for Report Date
+    if (filters.date1) {
+        result = result.filter(row => {
+            // Check if REPORT_DATE exists in the row
+            if (!row.REPORT_DATE) return false;
+
+            // Standardize both dates to string and trim whitespace to ensure accurate comparison
+            // Note: Ensure your API date format matches the HTML date input (YYYY-MM-DD)
+            return String(row.REPORT_DATE).trim() === String(filters.date1).trim();
+        });
+    }
+
+    // 2. Client-side filter for GLCC Search
+    if (glccSearch) {
+        result = result.filter(row => 
+            row.GLCC_VAL.toLowerCase().includes(glccSearch.toLowerCase())
+        );
+    }
+
+    return result;
+}, [rows, filters.date1, glccSearch]);
