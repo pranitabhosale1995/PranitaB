@@ -1,0 +1,71 @@
+const fetchDifferences = useCallback(async () => {
+    // 1. Initial validation for the active tab
+    if (activeTab === 'particular' && !filters.date1) return;
+    
+    setLoading(true);
+    try {
+        // 2. Fetching full data from the single API endpoint
+        const response = await callApi('/RS/differences', {
+            params: { 
+                page: 0, 
+                size: 500, // Fetching a larger set to filter locally
+                reportDate: activeTab === 'particular' ? filters.date1 : null,
+                glccFilter: activeTab === 'particular' ? filters.glcc : null
+            }
+        }, "GET");
+
+        const content = response?.data?.content || response?.content || [];
+        
+        if (Array.isArray(content)) {
+            const mappedRows = content.map((item, index) => ({
+                id: item.id || `row-${index}`,
+                ERROR_DATE: item.errorDate || '', 
+                REPORT_DATE: item.reconRunDate || '-', // Using this as the reference for filtering
+                GLCC_VAL: `${item.branchCode || ''} ${item.currency || ''} ${item.cgl || ''}`.trim() || '-',
+                CBS_BALANCE: item.cbsBalance ?? 0,
+                GL_BALANCE: item.glBalance ?? 0,
+                DIFFERENCE_AMOUNT: item.differenceAmount ?? 0,
+                DIFF_YESTERDAY: item.diffBwYesterday ?? 0,
+                TYPE_VAL: item.type || '-',
+                HEAD_VAL: item.head || '-',
+            }));
+            setRows(mappedRows);
+        } else {
+            setRows([]);
+        }
+    } catch (err) {
+        console.error("Fetch Error:", err);
+        setRows([]);
+    } finally {
+        setLoading(false);
+    }
+}, [activeTab, filters.date1, filters.glcc, callApi]);
+
+// 3. Client-side Filtering Logic for Range Search
+const filteredRows = useMemo(() => {
+    let result = rows;
+
+    // Apply GLCC Search filter first
+    if (glccSearch) {
+        result = result.filter(row => 
+            row.GLCC_VAL.toLowerCase().includes(glccSearch.toLowerCase())
+        );
+    }
+
+    // Apply Range Search filter based on REPORT_DATE
+    if (activeTab === 'range' && filters.startDate && filters.endDate) {
+        const start = new Date(filters.startDate);
+        const end = new Date(filters.endDate);
+
+        result = result.filter(row => {
+            if (row.REPORT_DATE === '-') return false;
+            const reportDate = new Date(row.REPORT_DATE);
+            
+            // Check if REPORT_DATE falls between startDate and endDate
+            return reportDate >= start && reportDate <= end && 
+                   (filters.rangeGlcc ? row.GLCC_VAL.includes(filters.rangeGlcc) : true);
+        });
+    }
+
+    return result;
+}, [rows, glccSearch, activeTab, filters.startDate, filters.endDate, filters.rangeGlcc]);
