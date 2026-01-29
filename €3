@@ -1,0 +1,45 @@
+const fetchDifferences = useCallback(async () => {
+    // Validation Logic
+    if (activeTab === 'particular' && !date1) return;
+    if (activeTab === 'range' && (!startDate || !endDate)) return;
+
+    setLoading(true);
+    try {
+        const response = await callApi('/RS/differences', {
+            params: { 
+                page: 0, 
+                size: 100, 
+                reportDate: activeTab === 'particular' ? date1 : null,
+                glccFilter: activeTab === 'particular' ? glcc : rangeGlcc,
+                startDate: activeTab === 'range' ? startDate : null,
+                endDate: activeTab === 'range' ? endDate : null,
+                isRange: activeTab === 'range'
+            }
+        }, "GET");
+
+        const content = response?.data?.content || response?.content || [];
+        
+        if (Array.isArray(content)) {
+            const mappedRows = content.map((item, index) => ({
+                id: item.id || `row-${index}`,
+                ERROR_DATE: item.errorDate || '',
+                REPORT_DATE: item.reconRunDate || '-',
+                GLCC_VAL: `${item.branchCode || ''} ${item.currency || ''} ${item.cgl || ''}`.trim() || '-',
+                CBS_BALANCE: item.cbsBalance ?? 0,
+                GL_BALANCE: item.glBalance ?? 0,
+                DIFFERENCE_AMOUNT: item.differenceAmount ?? 0,
+                DIFF_YESTERDAY: item.diffBwYesterday ?? 0,
+                TYPE_VAL: item.type || '-',
+                HEAD_VAL: item.head || '-',
+            }));
+            setRows(mappedRows);
+        } else {
+            setRows([]);
+        }
+    } catch (err) {
+        console.error("Fetch Error:", err);
+        setRows([]);
+    } finally {
+        setLoading(false);
+    }
+}, [activeTab, date1, glcc, startDate, endDate, rangeGlcc, callApi]);
