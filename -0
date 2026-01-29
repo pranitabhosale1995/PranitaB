@@ -1,0 +1,60 @@
+const [openHistory, setOpenHistory] = useState(false);
+const [selectedRow, setSelectedRow] = useState(null);
+
+const handleOpenHistory = (row) => {
+    setSelectedRow(row);
+    setOpenHistory(true);
+};
+
+const handleCloseHistory = () => {
+    setOpenHistory(false);
+    setSelectedRow(null);
+};
+
+const columns = useMemo(() => {
+    const baseCols = [
+        // ... your other columns
+    ];
+
+    if (activeTab === 'particular') {
+        baseCols.push({
+            field: 'actions',
+            headerName: 'Action',
+            width: 80,
+            renderCell: (params) => (
+                <IconButton 
+                    color="primary" 
+                    onClick={() => handleOpenHistory(params.row)}
+                >
+                    <HistoryIcon />
+                </IconButton>
+            )
+        });
+    }
+    return baseCols;
+}, [activeTab]);
+
+
+import { Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
+
+// Add this at the end of your return statement
+<Dialog open={openHistory} onClose={handleCloseHistory} maxWidth="sm" fullWidth>
+    <DialogTitle sx={{ fontWeight: 'bold' }}>Details of Difference</DialogTitle>
+    <DialogContent dividers>
+        {selectedRow ? (
+            <Stack spacing={2}>
+                <Typography><strong>GLCC:</strong> {selectedRow.GLCC_VAL}</Typography>
+                <Typography><strong>Report Date:</strong> {selectedRow.REPORT_DATE}</Typography>
+                <Typography color="error"><strong>Difference Amount:</strong> {selectedRow.DIFFERENCE_AMOUNT}</Typography>
+                <Typography><strong>Head:</strong> {selectedRow.HEAD_VAL}</Typography>
+                <Typography><strong>Type:</strong> {selectedRow.TYPE_VAL}</Typography>
+                {/* Add more fields as per your "fincore app" requirements */}
+            </Stack>
+        ) : (
+            <Typography>No details available.</Typography>
+        )}
+    </DialogContent>
+    <DialogActions>
+        <Button onClick={handleCloseHistory} variant="contained">Close</Button>
+    </DialogActions>
+</Dialog>
