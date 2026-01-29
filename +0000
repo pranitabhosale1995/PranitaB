@@ -1,0 +1,48 @@
+const filteredRows = useMemo(() => {
+    let result = [...rows];
+
+    // --- Particular Search Logic ---
+    if (activeTab === 'particular') {
+        // Only filter if date1 has a value, otherwise show all rows
+        if (filters.date1) {
+            result = result.filter(row => 
+                String(row.REPORT_DATE).trim() === String(filters.date1).trim()
+            );
+        }
+    }
+
+    // --- Range Search Logic ---
+    if (activeTab === 'range') {
+        // Only start filtering IF user has typed at least one character in GLCC
+        // This prevents data from disappearing when you just click the tab
+        if (filters.rangeGlcc && filters.rangeGlcc.trim() !== "") {
+            
+            // 1. Filter by GLCC
+            result = result.filter(row => 
+                row.GLCC_VAL.toLowerCase().includes(filters.rangeGlcc.toLowerCase())
+            );
+
+            // 2. Further filter by Date Range ONLY if both dates are selected
+            if (filters.startDate && filters.endDate) {
+                const start = new Date(filters.startDate);
+                const end = new Date(filters.endDate);
+
+                result = result.filter(row => {
+                    if (!row.REPORT_DATE) return false;
+                    const rowDate = new Date(row.REPORT_DATE);
+                    return rowDate >= start && rowDate <= end;
+                });
+            }
+        }
+        // If rangeGlcc is empty, it will fall through and show all rows
+    }
+
+    // Global GLCC search (from the text field)
+    if (glccSearch) {
+        result = result.filter(row => 
+            row.GLCC_VAL.toLowerCase().includes(glccSearch.toLowerCase())
+        );
+    }
+
+    return result;
+}, [rows, filters.date1, filters.rangeGlcc, filters.startDate, filters.endDate, glccSearch, activeTab]);
