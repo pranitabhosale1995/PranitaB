@@ -1,0 +1,89 @@
+const fetchDifferences = useCallback(async () => {
+    // 1. Tab-specific Validation
+    if (activeTab === 'particular' && !filters.date1) return;
+
+    if (activeTab === 'range') {
+        // Strict Validation: GLCC is compulsory for Range Search
+        if (!filters.rangeGlcc || filters.rangeGlcc.trim() === "") {
+            alert("GLCC is compulsory for Range Search. Please enter a GLCC value before searching.");
+            return;
+        }
+        // Ensure dates are selected
+        if (!filters.startDate || !filters.endDate) return;
+    }
+
+    setLoading(true);
+    try {
+        // 2. API Call: Fetching data from the single endpoint
+        const response = await callApi('/RS/differences', {
+            params: { 
+                page: 0, 
+                size: 500, // Fetching larger set for local filtering
+                reportDate: activeTab === 'particular' ? filters.date1 : null,
+                glccFilter: activeTab === 'particular' ? filters.glcc : null
+            }
+        }, "GET");
+
+        const content = response?.data?.content || response?.content || [];
+        
+        if (Array.isArray(content)) {
+            const mappedRows = content.map((item, index) => ({
+                id: item.id || `row-${index}`,
+                ERROR_DATE: item.errorDate || '', 
+                REPORT_DATE: item.reconRunDate || '-', 
+                GLCC_VAL: `${item.branchCode || ''} ${item.currency || ''} ${item.cgl || ''}`.trim() || '-',
+                CBS_BALANCE: item.cbsBalance ?? 0,
+                GL_BALANCE: item.glBalance ?? 0,
+                DIFFERENCE_AMOUNT: item.differenceAmount ?? 0,
+                DIFF_YESTERDAY: item.diffBwYesterday ?? 0,
+                TYPE_VAL: item.type || '-',
+                HEAD_VAL: item.head || '-',
+            }));
+            setRows(mappedRows);
+        } else {
+            setRows([]);
+        }
+    } catch (err) {
+        console.error("Fetch Error:", err);
+        setRows([]);
+    } finally {
+        setLoading(false);
+    }
+}, [activeTab, filters, callApi]);
+
+
+const filteredRows = useMemo(() => {
+    let result = rows;
+
+    // Filter for Particular Search Tab
+    if (activeTab === 'particular' && glccSearch) {
+        result = result.filter(row => 
+            row.GLCC_VAL.toLowerCase().includes(glccSearch.toLowerCase())
+        );
+    }
+
+    // Strict Filter for Range Search Tab
+    if (activeTab === 'range') {
+        // If GLCC is missing, return empty array to enforce the "Compulsory" rule visually
+        if (!filters.rangeGlcc) return [];
+
+        const start = new Date(filters.startDate);
+        const end = new Date(filters.endDate);
+        const searchGlcc = filters.rangeGlcc.toLowerCase();
+
+        result = result.filter(row => {
+            if (row.REPORT_DATE === '-') return false;
+            
+            const reportDate = new Date(row.REPORT_DATE);
+            const rowGlcc = row.GLCC_VAL.toLowerCase();
+
+            // Match exact or partial GLCC string AND check date range
+            const isGlccMatch = rowGlcc.includes(searchGlcc);
+            const isDateInRange = reportDate >= start && reportDate <= end;
+
+            return isGlccMatch && isDateInRange;
+        });
+    }
+
+    return result;
+}, [rows, glccSearch, activeTab, filters.startDate, filters.endDate, filters.rangeGlcc]);
