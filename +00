@@ -1,0 +1,26 @@
+const filteredRows = useMemo(() => {
+    let result = [...rows];
+
+    if (activeTab === 'range') {
+        if (!filters.rangeGlcc || filters.rangeGlcc.trim() === "") {
+            return [];
+        }
+
+        result = result.filter(row => 
+            row.GLCC_VAL.toLowerCase().includes(filters.rangeGlcc.toLowerCase())
+        );
+
+        if (filters.startDate && filters.endDate) {
+            const start = new Date(filters.startDate);
+            const end = new Date(filters.endDate);
+
+            result = result.filter(row => {
+                if (!row.REPORT_DATE) return false;
+                const rowDate = new Date(row.REPORT_DATE);
+                return rowDate >= start && rowDate <= end;
+            });
+        }
+    }
+
+    return result;
+}, [rows, filters.rangeGlcc, filters.startDate, filters.endDate, activeTab]);
