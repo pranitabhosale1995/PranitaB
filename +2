@@ -1,0 +1,53 @@
+const fetchDifferences = useCallback(async () => {
+    // 1. Validation Logic: Check if required filters are present based on the active tab
+    if (activeTab === 'particular' && !filters.date1) return;
+    if (activeTab === 'range' && (!filters.startDate || !filters.endDate)) return;
+
+    setLoading(true);
+    try {
+        // 2. API Call: Passing conditional parameters to the single endpoint
+        // Note: Using startDate and endDate as references for Report Date filtering
+        const response = await callApi('/RS/differences', {
+            params: { 
+                page: 0, 
+                size: 100, 
+                // Parameters for Particular Search
+                reportDate: activeTab === 'particular' ? filters.date1 : null,
+                glccFilter: activeTab === 'particular' ? filters.glcc : null,
+                
+                // Parameters for Range Search using Report Date as reference
+                startDate: activeTab === 'range' ? filters.startDate : null,
+                endDate: activeTab === 'range' ? filters.endDate : null,
+                rangeGlcc: activeTab === 'range' ? filters.rangeGlcc : null,
+                
+                searchType: activeTab 
+            }
+        }, "GET");
+
+        const content = response?.data?.content || response?.content || [];
+        
+        // 3. Data Mapping: Converting API response to DataGrid compatible rows
+        if (Array.isArray(content)) {
+            const mappedRows = content.map((item, index) => ({
+                id: item.id || `row-${index}`,
+                ERROR_DATE: item.errorDate || '', 
+                REPORT_DATE: item.reconRunDate || '-', 
+                GLCC_VAL: `${item.branchCode || ''} ${item.currency || ''} ${item.cgl || ''}`.trim() || '-',
+                CBS_BALANCE: item.cbsBalance ?? 0,
+                GL_BALANCE: item.glBalance ?? 0,
+                DIFFERENCE_AMOUNT: item.differenceAmount ?? 0,
+                DIFF_YESTERDAY: item.diffBwYesterday ?? 0,
+                TYPE_VAL: item.type || '-',
+                HEAD_VAL: item.head || '-',
+            }));
+            setRows(mappedRows);
+        } else {
+            setRows([]);
+        }
+    } catch (err) {
+        console.error("Fetch Error:", err);
+        setRows([]);
+    } finally {
+        setLoading(false);
+    }
+}, [activeTab, filters, callApi]); // Dependency on activeTab and filters object
