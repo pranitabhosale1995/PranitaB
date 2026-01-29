@@ -1,0 +1,209 @@
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { DataGrid, gridClasses } from '@mui/x-data-grid';
+import { Box, Paper, Stack, Button, TextField, CircularProgress, Typography, IconButton } from '@mui/material';
+import HistoryIcon from '@mui/icons-material/History';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import useApi from './hooks/useApi'; // Adjust path accordingly
+
+const BalanceCompareDifferenceScreen = () => {
+    const { callApi } = useApi();
+
+    // Grouping Related State
+    const [activeTab, setActiveTab] = useState('current');
+    const [rows, setRows] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(false);
+    const [glccSearch, setGlccSearch] = useState('');
+    
+    // Filters State
+    const [filters, setFilters] = useState({
+        date1: '',
+        glcc: '',
+        startDate: '',
+        endDate: '',
+        rangeGlcc: '',
+        systemEtlDate: ''
+    });
+
+    const updateFilter = (key, value) => setFilters(prev => ({ ...prev, [key]: value }));
+
+    // --- API Logic ---
+    const fetchDifferences = useCallback(async () => {
+        if (activeTab !== 'current' && !filters.date1) return;
+        
+        setLoading(true);
+        try {
+            const response = await callApi('/RS/differences', {
+                params: { page: 0, size: 100, reportDate: filters.date1, glccFilter: filters.glcc }
+            }, "GET");
+
+            const content = response?.data?.content || response?.content || [];
+            if (Array.isArray(content)) {
+                const mappedRows = content.map((item, index) => ({
+                    id: item.id || `row-${index}`,
+                    ERROR_DATE: '',
+                    REPORT_DATE: item.reconRunDate || '-',
+                    GLCC_VAL: `${item.branchCode || ''} ${item.currency || ''} ${item.cgl || ''}`,
+                    CBS_BALANCE: item.cbsBalance ?? 0,
+                    GL_BALANCE: item.glBalance ?? 0,
+                    DIFFERENCE_AMOUNT: item.differenceAmount ?? 0,
+                    DIFF_YESTERDAY: item.diffBwYesterday ?? 0,
+                    TYPE_VAL: item.type || '-',
+                    HEAD_VAL: item.head || '-',
+                }));
+                setRows(mappedRows);
+            }
+        } catch (err) {
+            setRows([]);
+        } finally {
+            setLoading(false);
+        }
+    }, [activeTab, filters.date1, filters.glcc, callApi]);
+
+    const getEtlDate = useCallback(async () => {
+        if (!isExpanded || activeTab !== 'particular') return;
+        
+        try {
+            const res = await callApi('/PS/fincore-date', {}, "GET");
+            const finalData = res?.data?.data || res?.data || res;
+            
+            if (finalData?.success || finalData?.etlDate) {
+                const dateVal = finalData.etlDate || finalData.data?.etlDate;
+                if (dateVal) {
+                    updateFilter('systemEtlDate', dateVal);
+                    updateFilter('date1', String(dateVal));
+                    fetchDifferences();
+                }
+            }
+        } catch (err) {
+            console.error("Date fetch error", err);
+        }
+    }, [isExpanded, activeTab, callApi, fetchDifferences]);
+
+    // --- Effects ---
+    useEffect(() => { fetchDifferences(); }, [fetchDifferences]);
+    useEffect(() => { getEtlDate(); }, [getEtlDate]);
+
+    // --- Handlers ---
+    const handleTabSwitch = (tab) => {
+        if (activeTab === tab && isExpanded) {
+            setIsExpanded(false);
+        } else {
+            setIsExpanded(true);
+            setActiveTab(tab);
+        }
+    };
+
+    const handleReset = () => {
+        setFilters({ date1: '', glcc: '', startDate: '', endDate: '', rangeGlcc: '', systemEtlDate: '' });
+        setGlccSearch('');
+        setActiveTab('current');
+        fetchDifferences();
+    };
+
+    // --- Memoized Data Grid Config ---
+    const filteredRows = useMemo(() => {
+        if (!glccSearch) return rows;
+        return rows.filter(row => row.GLCC_VAL.toLowerCase().includes(glccSearch.toLowerCase()));
+    }, [rows, glccSearch]);
+
+    const columns = useMemo(() => {
+        const baseCols = [
+            { field: 'ERROR_DATE', headerName: 'Error Date', flex: 1 },
+            { field: 'REPORT_DATE', headerName: 'Report Date', flex: 1 },
+            { field: 'GLCC_VAL', headerName: 'GLCC', flex: 1.5 },
+            { field: 'CBS_BALANCE', headerName: 'CBS Balance', flex: 1, align: 'right' },
+            { field: 'GL_BALANCE', headerName: 'GL Balance', flex: 1, align: 'right' },
+            { 
+                field: 'DIFFERENCE_AMOUNT', 
+                headerName: 'Difference', 
+                flex: 1,
+                renderCell: (params) => (
+                    <Typography color="error" fontWeight="bold">{params.value}</Typography>
+                )
+            },
+            { field: 'DIFF_YESTERDAY', headerName: 'Diff Yesterday', flex: 1 },
+            { field: 'TYPE_VAL', headerName: 'Type', flex: 1 },
+            { field: 'HEAD_VAL', headerName: 'Head', flex: 1 },
+        ];
+
+        if (activeTab === 'particular') {
+            baseCols.push({
+                field: 'actions',
+                headerName: 'Action',
+                width: 80,
+                renderCell: () => <IconButton color="primary"><HistoryIcon /></IconButton>
+            });
+        }
+        return baseCols;
+    }, [activeTab]);
+
+    return (
+        <Box sx={{ p: 3, bgcolor: '#f8fafd', minHeight: '100vh' }}>
+            <Typography variant="h5" sx={{ mb: 3, fontWeight: 700 }}>Balance Compare Difference</Typography>
+
+            {/* Tab Controls */}
+            <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+                <Button 
+                    variant={activeTab === 'particular' && isExpanded ? "contained" : "outlined"}
+                    onClick={() => handleTabSwitch('particular')}
+                    sx={{ textTransform: 'none' }}
+                >
+                    Particular Search
+                </Button>
+                <Button 
+                    variant={activeTab === 'range' && isExpanded ? "contained" : "outlined"}
+                    color="secondary"
+                    onClick={() => handleTabSwitch('range')}
+                    sx={{ textTransform: 'none' }}
+                >
+                    Range Search
+                </Button>
+            </Stack>
+
+            {/* Search Panels */}
+            {isExpanded && (
+                <Paper sx={{ p: 2, mb: 2, border: '1px solid #ddd' }}>
+                    <Stack direction="row" spacing={2} alignItems="center">
+                        {activeTab === 'particular' ? (
+                            <>
+                                <TextField type="date" label="Report Date" value={filters.date1} onChange={(e) => updateFilter('date1', e.target.value)} InputLabelProps={{ shrink: true }} size="small" />
+                                <TextField label="Search GLCC" value={glccSearch} onChange={(e) => setGlccSearch(e.target.value)} size="small" />
+                            </>
+                        ) : (
+                            <>
+                                <TextField label="GLCC (Compulsory)" required value={filters.rangeGlcc} onChange={(e) => updateFilter('rangeGlcc', e.target.value)} size="small" />
+                                <TextField type="date" label="Start Date" value={filters.startDate} onChange={(e) => updateFilter('startDate', e.target.value)} InputLabelProps={{ shrink: true }} size="small" />
+                                <TextField type="date" label="End Date" value={filters.endDate} onChange={(e) => updateFilter('endDate', e.target.value)} InputLabelProps={{ shrink: true }} size="small" />
+                            </>
+                        )}
+                        <Button onClick={handleReset} variant="outlined" color={activeTab === 'range' ? "error" : "primary"} startIcon={<RestartAltIcon />}>
+                            Reset
+                        </Button>
+                    </Stack>
+                </Paper>
+            )}
+
+            {/* Data Grid Section */}
+            <Paper elevation={0} sx={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', position: 'relative' }}>
+                {loading && (
+                    <Box sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10, bgcolor: 'rgba(255,255,255,0.7)' }}>
+                        <CircularProgress />
+                    </Box>
+                )}
+                <DataGrid
+                    rows={filteredRows}
+                    columns={columns}
+                    pageSizeOptions={[10, 25, 50]}
+                    initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+                    sx={{
+                        border: 0,
+                        [`& .${gridClasses.columnHeader}`]: { bgcolor: '#f1f5f9' }
+                    }}
+                />
+            </Paper>
+        </Box>
+    );
+};
+
+export default BalanceCompareDifferenceScreen;
