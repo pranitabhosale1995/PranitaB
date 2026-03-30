@@ -1,0 +1,29 @@
+<svg width="400" height="450" viewBox="0 0 400 450" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="grad1" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+      <stop offset="0%" style="stop-color:#6a3093;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2e1065;stop-opacity:1" />
+    </radialGradient>
+  </defs>
+
+  <circle cx="200" cy="180" r="145" fill="none" stroke="#a1a1aa" stroke-width="8" />
+  <circle cx="200" cy="180" r="140" fill="url(#grad1)" stroke="#4c1d95" stroke-width="2" />
+
+  <path d="M 100 120 A 110 110 0 0 1 300 120" fill="none" stroke="#a78bfa" stroke-width="12" stroke-linecap="round" opacity="0.6" />
+  <path d="M 300 240 A 110 110 0 0 1 100 240" fill="none" stroke="#a78bfa" stroke-width="12" stroke-linecap="round" opacity="0.6" />
+  
+  <polyline points="90,135 100,115 120,125" fill="none" stroke="#a78bfa" stroke-width="8" />
+  <polyline points="310,225 300,245 280,235" fill="none" stroke="#a78bfa" stroke-width="8" />
+
+  <circle cx="200" cy="160" r="45" fill="none" stroke="white" stroke-width="6" />
+  <path d="M 200 160 v -15" stroke="white" stroke-width="6" stroke-linecap="round" />
+  <path d="M 180 210 h 40 v 25 a 20 20 0 0 1 -40 0 z" fill="white" />
+  <path d="M 185 210 v -15 a 15 15 0 0 1 30 0 v 15" fill="none" stroke="white" stroke-width="5" />
+
+  <rect x="160" y="110" width="12" height="20" fill="#cbd5e1" />
+  <rect x="180" y="100" width="12" height="30" fill="#e2e8f0" />
+  <rect x="200" y="85" width="12" height="45" fill="white" />
+  <text x="220" y="115" font-family="Arial" font-size="36" fill="white" font-weight="bold">₹</text>
+
+  <text x="200" y="380" font-family="Verdana, sans-serif" font-size="52" fill="#2e1065" font-weight="900" text-anchor="middle" letter-spacing="5">FINCORE</text>
+</svg>
